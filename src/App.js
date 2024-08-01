@@ -1,25 +1,34 @@
-import logo from './logo.svg';
-import './App.css';
+import React, { useState, useEffect } from 'react';
+import AlienShooter from './components/AlienShooter';
+import AlienViewer from './components/AlienViewer';
+import io from 'socket.io-client';
 
-function App() {
+const socket = io('http://localhost:4000');
+
+const App = () => {
+  const [role, setRole] = useState(null);
+
+  useEffect(() => {
+    socket.on('role', (assignedRole) => {
+      console.log('Assigned role:', assignedRole);
+      setRole(assignedRole);
+    });
+
+    return () => {
+      socket.off('role');
+    };
+  }, []);
+
+  if (role === null) {
+    return <div>Connecting...</div>;
+  }
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div>
+      {role === 'host' && <AlienShooter socket={socket} />}
+      {role === 'viewer' && <AlienViewer socket={socket} />}
     </div>
   );
-}
+};
 
 export default App;
