@@ -25,6 +25,7 @@
   width: 500px; /* More narrow */
   height: 700px; /* Adjusted height */
   background-color: #b0e0e6; /* Pale blue background color */
+  background-image:url('/public/sea.png');
   overflow: hidden;
   margin: 0 auto;
 }

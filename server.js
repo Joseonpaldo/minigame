@@ -6,7 +6,6 @@ const path = require('path');
 
 const app = express();
 
-// Enable CORS for all routes
 app.use(cors({
   origin: 'http://localhost:3000',
   methods: ['GET', 'POST']
@@ -43,12 +42,13 @@ io.on('connection', (socket) => {
   } else {
     socket.emit('role', 'viewer');
     console.log('Viewer assigned');
+    socket.emit('initialGameState', gameState);
   }
 
-  // Send the current game state to the new client
-  socket.emit('gameState', gameState);
+  socket.on('requestInitialGameState', () => {
+    socket.emit('initialGameState', gameState);
+  });
 
-  // Handle disconnection
   socket.on('disconnect', () => {
     console.log('Client disconnected');
     if (socket === hostSocket) {
@@ -57,18 +57,57 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle game updates from the game host
-  socket.on('updateGameState', (newGameState) => {
+  socket.on('playerPosition', (newPosition) => {
     if (socket === hostSocket) {
-      gameState = newGameState;
-      console.log('Received new game state from host:', gameState); // Add this line
-      // Broadcast the updated game state to all clients except the sender
-      socket.broadcast.emit('gameState', gameState);
+      gameState.spaceshipPosition = newPosition;
+      socket.broadcast.emit('playerPosition', newPosition);
+    }
+  });
+
+  socket.on('newAlien', (newAlien) => {
+    if (socket === hostSocket) {
+      gameState.aliens.push(newAlien);
+      socket.broadcast.emit('newAlien', newAlien);
+    }
+  });
+
+  socket.on('newBullet', (newBullet) => {
+    if (socket === hostSocket) {
+      gameState.bullets.push(newBullet);
+      socket.broadcast.emit('newBullet', newBullet);
+    }
+  });
+
+  socket.on('newSpecialEntity', (newSpecialEntity) => {
+    if (socket === hostSocket) {
+      gameState.specialEntities.push(newSpecialEntity);
+      socket.broadcast.emit('newSpecialEntity', newSpecialEntity);
+    }
+  });
+
+  socket.on('updateTimer', (newTime) => {
+    if (socket === hostSocket) {
+      gameState.timeLeft = newTime;
+      socket.broadcast.emit('updateTimer', newTime);
+    }
+  });
+
+  socket.on('updatePositions', ({ aliens, specialEntities }) => {
+    if (socket === hostSocket) {
+      gameState.aliens = aliens;
+      gameState.specialEntities = specialEntities;
+      socket.broadcast.emit('updatePositions', { aliens, specialEntities });
+    }
+  });
+
+  socket.on('updateBullets', (bullets) => {
+    if (socket === hostSocket) {
+      gameState.bullets = bullets;
+      socket.broadcast.emit('updateBullets', bullets);
     }
   });
 });
 
-// Serve the React app from the build directory
 app.use(express.static(path.join(__dirname, 'build')));
 
 app.get('*', (req, res) => {
