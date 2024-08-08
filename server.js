@@ -15,95 +15,137 @@ const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
     origin: 'http://localhost:3000',
-    methods: ['GET', 'POST']
   }
 });
 
-let gameState = {
-  aliens: [],
-  bullets: [],
-  spaceshipPosition: 50,
-  gameOver: false,
-  timeLeft: 100,
-  shotsLeft: 5,
-  reloading: false,
-  specialEntities: [],
-};
-
-let hostSocket = null;
+let alienHostSocket = null;
+let platformerHostSocket = null;
+let alienGameState = null; // Initial state will be set by the host
+let platformerGameState = null; // Initial state will be set by the host
 
 io.on('connection', (socket) => {
   console.log('New client connected');
 
-  if (!hostSocket) {
-    hostSocket = socket;
-    socket.emit('role', 'host');
-    console.log('Host assigned');
-  } else {
-    socket.emit('role', 'viewer');
-    console.log('Viewer assigned');
-    socket.emit('initialGameState', gameState);
-  }
+  let roleAssigned = false;
 
-  socket.on('requestInitialGameState', () => {
-    socket.emit('initialGameState', gameState);
+  socket.on('joinGame', (gameType) => {
+    if (roleAssigned) return;
+    if (gameType === 'alienShooting') {
+      if (!alienHostSocket) {
+        alienHostSocket = socket;
+        roleAssigned = true;
+        socket.emit('role', 'host');
+        console.log('Alien Shooting Host assigned');
+      } else {
+        socket.emit('role', 'viewer');
+        roleAssigned = true;
+        console.log('Alien Shooting Viewer assigned');
+        if (alienGameState) {
+          socket.emit('initialGameState', alienGameState);
+        }
+      }
+    } else if (gameType === 'platformer') {
+      if (!platformerHostSocket) {
+        platformerHostSocket = socket;
+        roleAssigned = true;
+        socket.emit('role', 'host');
+        console.log('Platformer Host assigned');
+      } else {
+        socket.emit('role', 'viewer');
+        roleAssigned = true;
+        console.log('Platformer Viewer assigned');
+        if (platformerGameState) {
+          socket.emit('initialGameState', platformerGameState);
+        }
+      }
+    }
   });
 
   socket.on('disconnect', () => {
     console.log('Client disconnected');
-    if (socket === hostSocket) {
-      hostSocket = null;
-      console.log('Host disconnected');
+    if (socket === alienHostSocket) {
+      alienHostSocket = null;
+      console.log('Alien Shooting Host disconnected');
+    }
+    if (socket === platformerHostSocket) {
+      platformerHostSocket = null;
+      console.log('Platformer Host disconnected');
     }
   });
 
-  socket.on('playerPosition', (newPosition) => {
-    if (socket === hostSocket) {
-      gameState.spaceshipPosition = newPosition;
-      socket.broadcast.emit('playerPosition', newPosition);
+  // Alien Shooting Game events
+  socket.on('setInitialGameState', (initialState) => {
+    if (socket === alienHostSocket) {
+      alienGameState = initialState;
+      console.log('Alien Shooting initial game state set by host');
+    } else if (socket === platformerHostSocket) {
+      platformerGameState = initialState;
+      console.log('Platformer initial game state set by host');
+    }
+  });
+
+  socket.on('spaceshipPosition', (newPosition) => {
+    if (socket === alienHostSocket) {
+      alienGameState.spaceshipPosition = newPosition;
+      socket.broadcast.emit('spaceshipPosition', newPosition);
     }
   });
 
   socket.on('newAlien', (newAlien) => {
-    if (socket === hostSocket) {
-      gameState.aliens.push(newAlien);
+    if (socket === alienHostSocket) {
+      alienGameState.aliens.push(newAlien);
       socket.broadcast.emit('newAlien', newAlien);
     }
   });
 
   socket.on('newBullet', (newBullet) => {
-    if (socket === hostSocket) {
-      gameState.bullets.push(newBullet);
+    if (socket === alienHostSocket) {
+      alienGameState.bullets.push(newBullet);
       socket.broadcast.emit('newBullet', newBullet);
     }
   });
 
   socket.on('newSpecialEntity', (newSpecialEntity) => {
-    if (socket === hostSocket) {
-      gameState.specialEntities.push(newSpecialEntity);
+    if (socket === alienHostSocket) {
+      alienGameState.specialEntities.push(newSpecialEntity);
       socket.broadcast.emit('newSpecialEntity', newSpecialEntity);
     }
   });
 
   socket.on('updateTimer', (newTime) => {
-    if (socket === hostSocket) {
-      gameState.timeLeft = newTime;
+    if (socket === alienHostSocket) {
+      alienGameState.timeLeft = newTime;
       socket.broadcast.emit('updateTimer', newTime);
     }
   });
 
   socket.on('updatePositions', ({ aliens, specialEntities }) => {
-    if (socket === hostSocket) {
-      gameState.aliens = aliens;
-      gameState.specialEntities = specialEntities;
+    if (socket === alienHostSocket) {
+      alienGameState.aliens = aliens;
+      alienGameState.specialEntities = specialEntities;
       socket.broadcast.emit('updatePositions', { aliens, specialEntities });
     }
   });
 
   socket.on('updateBullets', (bullets) => {
-    if (socket === hostSocket) {
-      gameState.bullets = bullets;
+    if (socket === alienHostSocket) {
+      alienGameState.bullets = bullets;
       socket.broadcast.emit('updateBullets', bullets);
+    }
+  });
+
+  // Platformer Game events
+  socket.on('playerPosition', (newPlayerState) => {
+    if (socket === platformerHostSocket) {
+      platformerGameState.player = newPlayerState;
+      socket.broadcast.emit('playerPosition', newPlayerState);
+    }
+  });
+
+  socket.on('updatePlatformerGameState', (newGameState) => {
+    if (socket === platformerHostSocket) {
+      platformerGameState = { ...platformerGameState, ...newGameState };
+      socket.broadcast.emit('updatePlatformerGameState', newGameState);
     }
   });
 });

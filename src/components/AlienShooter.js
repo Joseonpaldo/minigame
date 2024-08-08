@@ -101,7 +101,7 @@ const AlienShooter = ({ socket }) => {
             id: Date.now(),
             left: Math.random() * 90,
             top: 0,
-            speed: isStrongAlien ? 0.01 : 0.05, // Strong alien is slower
+            speed: isStrongAlien ? 0.03 : 0.04, // Strong alien is slower
             type: isStrongAlien ? 'strong' : 'normal',
             hits: isStrongAlien ? 3 : 1, // Strong alien takes 3 hits, normal takes 1 hit
             flash: false, // Flash effect
