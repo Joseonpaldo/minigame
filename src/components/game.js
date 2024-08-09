@@ -1,22 +1,22 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import './Game.css'; // Include your CSS for styling
+import './Game.css';
 
 const GRAVITY = 0.2;
 const JUMP_STRENGTH = 6;
 const KNOCKBACK = 30;
-const PLAYER_WIDTH = 40; // Adjusted player width
-const PLAYER_HEIGHT = 40; // Adjusted player height
-const GAME_WIDTH = 1200;  // Example game width
-const GAME_HEIGHT = 800; // Example game height
-const BALL_SIZE = 50; // Size of the bouncing ball
-const BALL_JUMP_HEIGHT = 150; // Ball jump height
-const ZOOM_LEVEL = 2; // Zoom level
+const PLAYER_WIDTH = 40;
+const PLAYER_HEIGHT = 40;
+const GAME_WIDTH = 1200;
+const GAME_HEIGHT = 800;
+const BALL_SIZE = 50;
+const BALL_JUMP_HEIGHT = 150;
+const ZOOM_LEVEL = 2;
 
 const Game = ({ socket, gameType }) => {
     const [player, setPlayer] = useState({
-        x: 0, // Character spawn location X
-        y: 600, // Character spawn location Y
-        velY: 0, // Initial vertical velocity
+        x: 0,
+        y: 600,
+        velY: 0,
         isJumping: false,
         onLadder: false,
         direction: 0,
@@ -26,11 +26,11 @@ const Game = ({ socket, gameType }) => {
     });
     const [rockets, setRockets] = useState([]);
     const [balls, setBalls] = useState([
-        { x: 850, y: 650, initialY: 650, velY: -1.5 }, // Ball 1
-        { x: 400, y: 450, initialY: 450, velY: -1.5 }, // Ball 2
-        { x: 400, y: 250, initialY: 250, velY: -1.5 }, // Ball 3
-        { x: 800, y: 250, initialY: 250, velY: -1 }, // Ball 4
-        { x: 600, y: 250, initialY: 250, velY: -0.5 }, // Ball 5
+        { x: 850, y: 650, initialY: 650, velY: -1.5 },
+        { x: 400, y: 450, initialY: 450, velY: -1.5 },
+        { x: 400, y: 250, initialY: 250, velY: -1.5 },
+        { x: 800, y: 250, initialY: 250, velY: -1 },
+        { x: 600, y: 250, initialY: 250, velY: -0.5 },
     ]);
     const [timeLeft, setTimeLeft] = useState(60);
     const [isGameOver, setIsGameOver] = useState(false);
@@ -38,11 +38,9 @@ const Game = ({ socket, gameType }) => {
     const [role, setRole] = useState(null);
 
     const [platforms] = useState([
-        //1층
         { x: 0, y: 700, width: 300, height: 20 },
         { x: 400, y: 700, width: 300, height: 20 },
         { x: 800, y: 700, width: 300, height: 20 },
-        //2층
         { x: 0, y: 500, width: 100, height: 20 },
         { x: 150, y: 500, width: 70, height: 20 },
         { x: 300, y: 500, width: 200, height: 20 },
@@ -50,7 +48,6 @@ const Game = ({ socket, gameType }) => {
         { x: 600, y: 500, width: 100, height: 20 },
         { x: 800, y: 500, width: 100, height: 20 },
         { x: 1000, y: 500, width: 100, height: 20 },
-        //3층
         { x: 0, y: 300, width: 100, height: 20 },
         { x: 170, y: 300, width: 100, height: 20 },
         { x: 350, y: 300, width: 130, height: 20 },
@@ -59,37 +56,41 @@ const Game = ({ socket, gameType }) => {
         { x: 800, y: 300, width: 50, height: 20 },
         { x: 900, y: 280, width: 50, height: 20 },
         { x: 1000, y: 250, width: 100, height: 20 },
-        // Add more platforms as needed
     ]);
     const [ladders] = useState([
         { x: 1000, y: 500, height: 200 },
         { x: 0, y: 300, height: 200 },
-        // Add more ladders as needed
     ]);
     const [portal] = useState({ x: 1110, y: 200, width: 10, height: 60 });
 
     const gameRef = useRef(null);
 
     const handleKeyDown = useCallback((e) => {
-        e.preventDefault(); // Prevent the default action to stop the whole screen from scrolling
+        e.preventDefault();
         setPlayer((prev) => {
-            if (!prev || prev.isImmune) return prev; // Ensure prev is defined and not immune
+            if (!prev || prev.isImmune) return prev;
 
             let isWalking = false;
 
             switch (e.key) {
                 case 'ArrowUp':
                 case 'ArrowDown':
-                    return prev; // Block up and down arrow keys
+                    return prev;
                 case 'ArrowLeft':
                     isWalking = true;
-                    return { ...prev, x: prev.x - 10, direction: -1, isWalking };
+                    const newPosLeft = { ...prev, x: prev.x - 10, direction: -1, isWalking };
+                    socket.emit('playerPosition', newPosLeft); // Emit player position on key press
+                    return newPosLeft;
                 case 'ArrowRight':
                     isWalking = true;
-                    return { ...prev, x: prev.x + 10, direction: 1, isWalking };
+                    const newPosRight = { ...prev, x: prev.x + 10, direction: 1, isWalking };
+                    socket.emit('playerPosition', newPosRight); // Emit player position on key press
+                    return newPosRight;
                 case ' ':
                     if (!prev.isJumping) {
-                        return { ...prev, velY: -JUMP_STRENGTH, isJumping: true, isWalking };
+                        const jumpPos = { ...prev, velY: -JUMP_STRENGTH, isJumping: true, isWalking };
+                        socket.emit('playerPosition', jumpPos); // Emit player position on jump
+                        return jumpPos;
                     }
                     break;
                 case 'g':
@@ -102,12 +103,13 @@ const Game = ({ socket, gameType }) => {
                                 prev.y + PLAYER_HEIGHT > ladder.y &&
                                 prev.y < ladder.y + ladder.height
                             ) {
-                                // Move the player to the top of the ladder
                                 targetY = ladder.y - PLAYER_HEIGHT;
                             }
                         });
                         if (targetY !== undefined) {
-                            return { ...prev, y: targetY, velY: 0, onLadder: false };
+                            const ladderPos = { ...prev, y: targetY, velY: 0, onLadder: false };
+                            socket.emit('playerPosition', ladderPos); // Emit player position on ladder movement
+                            return ladderPos;
                         }
                     }
                     break;
@@ -116,18 +118,20 @@ const Game = ({ socket, gameType }) => {
             }
             return { ...prev, isWalking };
         });
-    }, [ladders]);
+    }, [ladders, socket]);
 
     const handleKeyUp = useCallback((e) => {
         e.preventDefault();
         setPlayer((prev) => {
-            if (!prev) return prev; // Ensure prev is defined
+            if (!prev) return prev;
             if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                return { ...prev, isWalking: false };
+                const stopWalkingPos = { ...prev, isWalking: false };
+                socket.emit('playerPosition', stopWalkingPos); // Emit player position on key release
+                return stopWalkingPos;
             }
             return prev;
         });
-    }, []);
+    }, [socket]);
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);
@@ -139,9 +143,34 @@ const Game = ({ socket, gameType }) => {
     }, [handleKeyDown, handleKeyUp]);
 
     useEffect(() => {
+        socket.emit('joinGame', gameType);
+
+        socket.on('role', (assignedRole) => {
+            setRole(assignedRole);
+            if (assignedRole === 'host') {
+                socket.emit('setInitialGameState', {
+                    player,
+                    rockets,
+                    balls,
+                    timeLeft,
+                    isGameOver
+                });
+            }
+        });
+
+        socket.on('initialGameState', (initialState) => {
+            setPlayer(initialState.player || {});
+            setRockets(initialState.rockets || []);
+            setBalls(initialState.balls || []);
+            setTimeLeft(initialState.timeLeft || 60);
+            setIsGameOver(initialState.isGameOver || false);
+        });
+
+    }, [role, gameType, socket,balls,isGameOver,player,rockets,timeLeft]);
+
+    useEffect(() => {
         if (!gameStarted) return;
 
-        // Timer interval
         const timerInterval = setInterval(() => {
             setTimeLeft((prev) => {
                 if (prev <= 1) {
@@ -159,7 +188,6 @@ const Game = ({ socket, gameType }) => {
     useEffect(() => {
         if (!gameStarted) return;
 
-        // Rocket shooting interval (every 5 seconds)
         const rocketInterval = setInterval(() => {
             setRockets((prev) => [
                 ...prev,
@@ -170,7 +198,7 @@ const Game = ({ socket, gameType }) => {
                 { x: GAME_WIDTH, y: 680, direction: 'left' },
                 { x: 0, y: 600, direction: 'right' }
             ]);
-        }, 5000); // Spawn rockets every 5 seconds
+        }, 5000);
 
         return () => clearInterval(rocketInterval);
     }, [gameStarted]);
@@ -178,23 +206,19 @@ const Game = ({ socket, gameType }) => {
     useEffect(() => {
         if (!gameStarted) return;
 
-        // Game logic interval (144 FPS)
         const gameInterval = setInterval(() => {
-            // Gravity and jump mechanics
             setPlayer((prev) => {
-                if (!prev) return prev; // Ensure prev is defined
+                if (!prev) return prev;
 
                 let newY = prev.y + prev.velY;
                 let newVelY = prev.velY + GRAVITY;
                 let isJumping = prev.isJumping;
 
-                // Move the player forward if jumping
                 let newX = prev.x;
                 if (prev.isJumping) {
                     newX = prev.x + 1 * prev.direction;
                 }
 
-                // Collision detection with platforms
                 let isOnPlatform = false;
                 platforms.forEach((platform) => {
                     if (
@@ -210,12 +234,10 @@ const Game = ({ socket, gameType }) => {
                     }
                 });
 
-                // Kill player if they fall to the ground
                 if (newY + PLAYER_HEIGHT > GAME_HEIGHT) {
                     setIsGameOver(true);
                 }
 
-                // Collision detection with ladders
                 let onLadder = false;
                 ladders.forEach((ladder) => {
                     if (
@@ -228,16 +250,27 @@ const Game = ({ socket, gameType }) => {
                     }
                 });
 
-                return { ...prev, x: newX, y: newY, velY: newVelY, isJumping, onLadder, isOnPlatform, isWalking: false };
+                const updatedPlayer = { 
+                    ...prev, 
+                    x: newX, 
+                    y: newY, 
+                    velY: newVelY, 
+                    isJumping, 
+                    onLadder, 
+                    isOnPlatform, 
+                    isWalking: false 
+                };
+
+                socket.emit('playerPosition', updatedPlayer); // Emit player position on each game interval
+
+                return updatedPlayer;
             });
 
-            // Move rockets
             setRockets((prev) => prev.map((rocket) => ({
                 ...rocket,
                 x: rocket.x + (rocket.direction === 'left' ? -3 : 3),
             })).filter(rocket => rocket.x > 0 && rocket.x < GAME_WIDTH));
 
-            // Move balls
             setBalls((prevBalls) =>
                 prevBalls.map((ball) => {
                     let newY = ball.y + ball.velY;
@@ -248,7 +281,6 @@ const Game = ({ socket, gameType }) => {
                 })
             );
 
-            // Check for collisions with rockets and balls
             setPlayer((prev) => {
                 if (!prev || prev.isImmune) return prev;
 
@@ -268,7 +300,6 @@ const Game = ({ socket, gameType }) => {
                     }
                 });
 
-                // Check for collisions with balls
                 balls.forEach((ball) => {
                     if (
                         prev.x < ball.x + BALL_SIZE &&
@@ -301,7 +332,6 @@ const Game = ({ socket, gameType }) => {
                 return { ...prev, x: newX, y: newY };
             });
 
-            // Check if player reaches the portal
             setPlayer((prev) => {
                 if (!prev) return prev;
                 if (
@@ -316,65 +346,15 @@ const Game = ({ socket, gameType }) => {
                 return prev;
             });
 
-            // Send player position update if role is host
-            if (role === 'host') {
-                socket.emit('playerPosition', player);
-            }
-
-        }, 1000 / 144); // 144 FPS
+        }, 1000 / 144);
 
         return () => clearInterval(gameInterval);
-    }, [gameStarted, rockets, platforms, portal, ladders, balls, player, role,socket]);
-
-    useEffect(() => {
-        socket.emit('joinGame', gameType);
-
-        socket.on('role', (assignedRole) => {
-            setRole(assignedRole);
-            if (assignedRole === 'host') {
-                // Send initial game state to the server
-                socket.emit('setInitialGameState', {
-                    player,
-                    rockets,
-                    balls,
-                    platforms,
-                    ladders,
-                    portal,
-                    timeLeft,
-                    isGameOver
-                });
-            }
-        });
-
-        socket.on('initialGameState', (initialState) => {
-            setPlayer(initialState.player);
-            setRockets(initialState.rockets);
-            setBalls(initialState.balls);
-            setTimeLeft(initialState.timeLeft);
-            setIsGameOver(initialState.isGameOver);
-        });
-
-        socket.on('playerPosition', (newPlayerState) => {
-            if (role !== 'host') {
-                setPlayer(newPlayerState);
-            }
-        });
-
-        socket.on('updatePlatformerGameState', (newGameState) => {
-            if (role !== 'host') {
-                setPlayer(newGameState.player);
-                setRockets(newGameState.rockets);
-                setBalls(newGameState.balls);
-                setTimeLeft(newGameState.timeLeft);
-                setIsGameOver(newGameState.isGameOver);
-            }
-        });
-    }, [role, gameType,socket,balls,isGameOver,ladders,platforms,player,portal,rockets,timeLeft]);
+    }, [gameStarted, rockets, platforms, portal, ladders, balls, player, socket]);
 
     const gameContainerStyle = {
         transform: `scale(${ZOOM_LEVEL})`,
         transformOrigin: `${player.x + PLAYER_WIDTH / 2}px ${player.y + PLAYER_HEIGHT / 2}px`,
-        transition: 'transform 0.1s ease-out', // Smooth transition for zoom
+        transition: 'transform 0.1s ease-out',
     };
 
     if (isGameOver) {
@@ -388,22 +368,22 @@ const Game = ({ socket, gameType }) => {
                 <div className="game" ref={gameRef} style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}>
                     <div className="timer">Time Left: {timeLeft}</div>
                     {!gameStarted && (
-                      <button 
-                      onClick={() => setGameStarted(true)}
-                      style={{
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        height: "100vh",
-                        width: "100%",
-                        border: "white",
-                        background: "none",
-                        cursor: "pointer",
-                        color:"red"
-                      }}
-                    >
-                      Start Game
-                    </button>
+                        <button 
+                            onClick={() => setGameStarted(true)}
+                            style={{
+                                display: "flex",
+                                justifyContent: "center",
+                                alignItems: "center",
+                                height: "100vh",
+                                width: "100%",
+                                border: "white",
+                                background: "none",
+                                cursor: "pointer",
+                                color: "red"
+                            }}
+                        >
+                            Start Game
+                        </button>
                     )}
                     {gameStarted && (
                         <div className="viewport" style={gameContainerStyle}>

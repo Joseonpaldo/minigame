@@ -7,14 +7,14 @@ const path = require('path');
 const app = express();
 
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: 'http://192.168.0.52:3000',
   methods: ['GET', 'POST']
 }));
 
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: 'http://localhost:3000',
+    origin: 'http://192.168.0.52:3000',
   }
 });
 
@@ -56,6 +56,10 @@ io.on('connection', (socket) => {
         platformerHostSocket = socket;
         platformerGameState = { // Initialize default game state for Platformer
           player: { x: 0, y: 0 },
+          rockets: [],
+          balls: [],
+          timeLeft: 60,
+          isGameOver: false,
         };
         roleAssigned = true;
         socket.emit('role', 'host');
@@ -100,7 +104,11 @@ io.on('connection', (socket) => {
     } else if (socket === platformerHostSocket) {
       platformerGameState = {
         player: { x: 0, y: 0 },
-        ...initialState,  // Similar setup for platformer
+        rockets: [],
+        balls: [],
+        timeLeft: 60,
+        isGameOver: false,
+        ...initialState,  // Use the initialState provided by the host to override defaults
       };
       console.log('Platformer initial game state set by host');
     }
@@ -110,7 +118,6 @@ io.on('connection', (socket) => {
     if (socket === alienHostSocket && alienGameState) {
       alienGameState.spaceshipPosition = newPosition;
       socket.broadcast.emit('spaceshipPosition', newPosition);
-      
     }
   });
 
@@ -176,7 +183,8 @@ io.on('connection', (socket) => {
 app.use(express.static(path.join(__dirname, 'build')));
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'build', 'index.html'));
+  //res.sendFile(path.join(__dirname, 'build', 'index.html'));
+  console.log("in")
 });
 
 server.listen(4000, () => {
