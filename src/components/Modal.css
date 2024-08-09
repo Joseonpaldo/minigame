@@ -11,7 +11,7 @@
 }
 
 .modal-content {
-  background-color: white;
+  background-color: black;
   background-size: cover; /* Cover the entire modal */
   background-position: center; /* Center the background image */
   padding: 20px;

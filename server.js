@@ -33,6 +33,13 @@ io.on('connection', (socket) => {
     if (gameType === 'alienShooting') {
       if (!alienHostSocket) {
         alienHostSocket = socket;
+        alienGameState = { // Initialize default game state for Alien Shooting
+          spaceshipPosition: 50,
+          aliens: [],
+          bullets: [],
+          specialEntities: [],
+          timeLeft: 100,
+        };
         roleAssigned = true;
         socket.emit('role', 'host');
         console.log('Alien Shooting Host assigned');
@@ -47,6 +54,9 @@ io.on('connection', (socket) => {
     } else if (gameType === 'platformer') {
       if (!platformerHostSocket) {
         platformerHostSocket = socket;
+        platformerGameState = { // Initialize default game state for Platformer
+          player: { x: 0, y: 0 },
+        };
         roleAssigned = true;
         socket.emit('role', 'host');
         console.log('Platformer Host assigned');
@@ -65,10 +75,12 @@ io.on('connection', (socket) => {
     console.log('Client disconnected');
     if (socket === alienHostSocket) {
       alienHostSocket = null;
+      alienGameState = null;
       console.log('Alien Shooting Host disconnected');
     }
     if (socket === platformerHostSocket) {
       platformerHostSocket = null;
+      platformerGameState = null;
       console.log('Platformer Host disconnected');
     }
   });
@@ -76,51 +88,62 @@ io.on('connection', (socket) => {
   // Alien Shooting Game events
   socket.on('setInitialGameState', (initialState) => {
     if (socket === alienHostSocket) {
-      alienGameState = initialState;
+      alienGameState = {
+        spaceshipPosition: 50,
+        aliens: [],
+        bullets: [],
+        specialEntities: [],
+        timeLeft: 100,
+        ...initialState,  // Use the initialState provided by the host to override defaults
+      };
       console.log('Alien Shooting initial game state set by host');
     } else if (socket === platformerHostSocket) {
-      platformerGameState = initialState;
+      platformerGameState = {
+        player: { x: 0, y: 0 },
+        ...initialState,  // Similar setup for platformer
+      };
       console.log('Platformer initial game state set by host');
     }
   });
 
   socket.on('spaceshipPosition', (newPosition) => {
-    if (socket === alienHostSocket) {
+    if (socket === alienHostSocket && alienGameState) {
       alienGameState.spaceshipPosition = newPosition;
       socket.broadcast.emit('spaceshipPosition', newPosition);
+      
     }
   });
 
   socket.on('newAlien', (newAlien) => {
-    if (socket === alienHostSocket) {
+    if (socket === alienHostSocket && alienGameState) {
       alienGameState.aliens.push(newAlien);
       socket.broadcast.emit('newAlien', newAlien);
     }
   });
 
   socket.on('newBullet', (newBullet) => {
-    if (socket === alienHostSocket) {
+    if (socket === alienHostSocket && alienGameState) {
       alienGameState.bullets.push(newBullet);
       socket.broadcast.emit('newBullet', newBullet);
     }
   });
 
   socket.on('newSpecialEntity', (newSpecialEntity) => {
-    if (socket === alienHostSocket) {
+    if (socket === alienHostSocket && alienGameState) {
       alienGameState.specialEntities.push(newSpecialEntity);
       socket.broadcast.emit('newSpecialEntity', newSpecialEntity);
     }
   });
 
   socket.on('updateTimer', (newTime) => {
-    if (socket === alienHostSocket) {
+    if (socket === alienHostSocket && alienGameState) {
       alienGameState.timeLeft = newTime;
       socket.broadcast.emit('updateTimer', newTime);
     }
   });
 
   socket.on('updatePositions', ({ aliens, specialEntities }) => {
-    if (socket === alienHostSocket) {
+    if (socket === alienHostSocket && alienGameState) {
       alienGameState.aliens = aliens;
       alienGameState.specialEntities = specialEntities;
       socket.broadcast.emit('updatePositions', { aliens, specialEntities });
@@ -128,7 +151,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('updateBullets', (bullets) => {
-    if (socket === alienHostSocket) {
+    if (socket === alienHostSocket && alienGameState) {
       alienGameState.bullets = bullets;
       socket.broadcast.emit('updateBullets', bullets);
     }
@@ -136,14 +159,14 @@ io.on('connection', (socket) => {
 
   // Platformer Game events
   socket.on('playerPosition', (newPlayerState) => {
-    if (socket === platformerHostSocket) {
+    if (socket === platformerHostSocket && platformerGameState) {
       platformerGameState.player = newPlayerState;
       socket.broadcast.emit('playerPosition', newPlayerState);
     }
   });
 
   socket.on('updatePlatformerGameState', (newGameState) => {
-    if (socket === platformerHostSocket) {
+    if (socket === platformerHostSocket && platformerGameState) {
       platformerGameState = { ...platformerGameState, ...newGameState };
       socket.broadcast.emit('updatePlatformerGameState', newGameState);
     }

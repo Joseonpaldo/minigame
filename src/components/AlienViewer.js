@@ -7,7 +7,7 @@ const AlienViewer = ({ socket }) => {
   const [spaceshipPosition, setSpaceshipPosition] = useState(50);
   const [gameOver, setGameOver] = useState(false);
   const [timeLeft, setTimeLeft] = useState(100);
-  const [shotsLeft, setShotsLeft] = useState(5);
+  const [shotsLeft, setShotsLeft] = useState(10);
   const [reloading, setReloading] = useState(false);
   const [specialEntities, setSpecialEntities] = useState([]);
 
@@ -17,6 +17,7 @@ const AlienViewer = ({ socket }) => {
     // Request the initial game state
     socket.emit('requestInitialGameState');
 
+    // Listen for the initial game state from the server
     socket.on('initialGameState', (initialState) => {
       console.log('Received initial game state:', initialState);
       setAliens(initialState.aliens);
@@ -29,46 +30,54 @@ const AlienViewer = ({ socket }) => {
       setSpecialEntities(initialState.specialEntities);
     });
 
+    // Listen for partial game state updates
     socket.on('updateGameState', (partialState) => {
       console.log('Received partial game state:', partialState);
       setGameOver(partialState.gameOver);
       setTimeLeft(partialState.timeLeft);
       setShotsLeft(partialState.shotsLeft);
       setReloading(partialState.reloading);
-      setSpaceshipPosition(partialState.spaceshipPosition);
+      // We deliberately do not update spaceshipPosition here to avoid overwriting
     });
 
-    socket.on('playerPosition', (newPosition) => {
-      console.log('Received player position:', newPosition);
+    // Listen for spaceship position updates separately
+    socket.on('spaceshipPosition', (newPosition) => {
+      console.log('Received spaceship position:', newPosition);
       setSpaceshipPosition(newPosition);
     });
 
+    // Listen for new aliens being spawned
     socket.on('newAlien', (newAlien) => {
       console.log('Received new alien:', newAlien);
       setAliens((prevState) => [...prevState, newAlien]);
     });
 
+    // Listen for new bullets being fired
     socket.on('newBullet', (newBullet) => {
       console.log('Received new bullet:', newBullet);
       setBullets((prevState) => [...prevState, newBullet]);
     });
 
+    // Listen for new special entities being spawned
     socket.on('newSpecialEntity', (newSpecialEntity) => {
       console.log('Received new special entity:', newSpecialEntity);
       setSpecialEntities((prevState) => [...prevState, newSpecialEntity]);
     });
 
+    // Listen for timer updates
     socket.on('updateTimer', (newTime) => {
       console.log('Received timer update:', newTime);
       setTimeLeft(newTime);
     });
 
+    // Listen for position updates of aliens and special entities
     socket.on('updatePositions', ({ aliens, specialEntities }) => {
       console.log('Received positions update');
       setAliens(aliens);
       setSpecialEntities(specialEntities);
     });
 
+    // Listen for bullets updates
     socket.on('updateBullets', (bullets) => {
       console.log('Received bullets update');
       setBullets(bullets);
@@ -78,7 +87,7 @@ const AlienViewer = ({ socket }) => {
       console.log('Viewer disconnecting from WebSocket server...');
       socket.off('initialGameState');
       socket.off('updateGameState');
-      socket.off('playerPosition');
+      socket.off('spaceshipPosition');
       socket.off('newAlien');
       socket.off('newBullet');
       socket.off('newSpecialEntity');
@@ -178,7 +187,7 @@ const AlienViewer = ({ socket }) => {
   return (
     <div className="alien-shooter">
       <div className="ammo">Shots Left: {shotsLeft}</div>
-      <div className="timer">Time Left: {timeLeft}s</div>
+      <div className="timer">Time Left: {timeLeft}</div>
       <div className="game-area">
         {aliens.map((alien) => (
           <div

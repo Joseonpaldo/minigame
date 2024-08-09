@@ -1,4 +1,5 @@
 .alien-shooter {
+  background-color: black;
   text-align: center;
   margin-top: 20px;
 }
@@ -9,15 +10,24 @@
 }
 
 .timer {
-  font-size: 1.5rem;
-  margin-bottom: 10px;
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 24px;
+  font-weight: bold;
+  z-index: 10;
 }
+
 
 .ammo {
   position: absolute;
-  top: 10px;
+  bottom: 10px;
   left: 10px;
-  font-size: 1.2rem;
+  font-size: 18px;
+  font-weight: bold;
+  z-index: 10;
+  color:red;
 }
 
 .game-area {
@@ -26,7 +36,8 @@
   height: 700px; /* Adjusted height */
   background-color: #b0e0e6; /* Pale blue background color */
   background-image:url('/public/sea.png');
-  overflow: hidden;
+  background-size: contain; /* Ensure the image fits within the element */
+  background-repeat: no-repeat;
   margin: 0 auto;
 }
 
@@ -47,9 +58,13 @@
 
 .bullet {
   position: absolute;
-  width: 5px;
+  width: 10px;
   height: 20px;
-  background-color: red;
+  background-image:url('/public/cannon_ball.png');
+  background-size: contain; /* Ensure the image fits within the element */
+  background-repeat: no-repeat;
+ 
+  
 }
 
 .spaceship {
@@ -58,6 +73,7 @@
   width: 100px; /* Adjusted size */
   height: 100px; /* Adjusted size */
   transform: translateX(-50%);
+
 }
 
 .spaceship img, .normal-alien img, .strong-alien img {

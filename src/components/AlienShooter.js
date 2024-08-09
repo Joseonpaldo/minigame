@@ -7,7 +7,7 @@ const AlienShooter = ({ socket }) => {
   const [spaceshipPosition, setSpaceshipPosition] = useState(50);
   const [gameOver, setGameOver] = useState(false);
   const [timeLeft, setTimeLeft] = useState(100); // Set game duration to 100 seconds
-  const [shotsLeft, setShotsLeft] = useState(5);
+  const [shotsLeft, setShotsLeft] = useState(10);
   const [reloading, setReloading] = useState(false);
   const [specialEntities, setSpecialEntities] = useState([]);
 
@@ -162,14 +162,16 @@ const AlienShooter = ({ socket }) => {
         if (event.key === 'ArrowLeft' || event.key === 'a') {
           setSpaceshipPosition((prev) => {
             const newPos = Math.max(prev - 2, 0);
-            socket.emit('playerPosition', newPos); // Emit player position update
+            socket.emit('spaceshipPosition', newPos); // Emit spaceship position update
+            console.log('Emitting spaceship position:', newPos); // Debug log
             return newPos;
           });
         }
         if (event.key === 'ArrowRight' || event.key === 'd') {
           setSpaceshipPosition((prev) => {
             const newPos = Math.min(prev + 2, 90);
-            socket.emit('playerPosition', newPos); // Emit player position update
+            socket.emit('spaceshipPosition', newPos); // Emit spaceship position update
+            console.log('Emitting spaceship position:', newPos); // Debug log
             return newPos;
           });
         }
@@ -182,7 +184,7 @@ const AlienShooter = ({ socket }) => {
           } else {
             setReloading(true);
             setTimeout(() => {
-              setShotsLeft(5);
+              setShotsLeft(10);
               setReloading(false);
             }, 1000);
           }
@@ -261,8 +263,8 @@ const AlienShooter = ({ socket }) => {
 
   return (
     <div className="alien-shooter">
-      <div className="ammo">Shots Left: {shotsLeft}</div>
-      <div className="timer">Time Left: {timeLeft}s</div>
+      
+      <div className="timer" >Time Left: {timeLeft}s</div>
       <div className="game-area">
         {aliens.map((alien) => (
           <div
@@ -286,9 +288,10 @@ const AlienShooter = ({ socket }) => {
           <div key={bullet.id} className="bullet" style={{ left: `${bullet.left}%`, top: `${bullet.top}%` }} />
         ))}
         <div className="spaceship" style={{ left: `${spaceshipPosition}%` }}>
-          <img src="/turtle.png" alt="Spaceship" />
+          <img src="/player.gif" alt="Spaceship" />
         </div>
         {reloading && <div className="reloading">Reloading...</div>}
+        <div className="ammo">Shots Left: {shotsLeft}</div>
       </div>
       {gameOver && (
         <div>

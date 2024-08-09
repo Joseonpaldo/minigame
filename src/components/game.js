@@ -9,7 +9,7 @@ const PLAYER_HEIGHT = 40; // Adjusted player height
 const GAME_WIDTH = 1200;  // Example game width
 const GAME_HEIGHT = 800; // Example game height
 const BALL_SIZE = 50; // Size of the bouncing ball
-const BALL_JUMP_HEIGHT = 100; // Ball jump height
+const BALL_JUMP_HEIGHT = 150; // Ball jump height
 const ZOOM_LEVEL = 2; // Zoom level
 
 const Game = ({ socket, gameType }) => {
@@ -26,9 +26,9 @@ const Game = ({ socket, gameType }) => {
     });
     const [rockets, setRockets] = useState([]);
     const [balls, setBalls] = useState([
-        { x: 850, y: 650, initialY: 650, velY: -1 }, // Ball 1
-        { x: 400, y: 450, initialY: 450, velY: -1 }, // Ball 2
-        { x: 400, y: 250, initialY: 250, velY: -0.8 }, // Ball 3
+        { x: 850, y: 650, initialY: 650, velY: -1.5 }, // Ball 1
+        { x: 400, y: 450, initialY: 450, velY: -1.5 }, // Ball 2
+        { x: 400, y: 250, initialY: 250, velY: -1.5 }, // Ball 3
         { x: 800, y: 250, initialY: 250, velY: -1 }, // Ball 4
         { x: 600, y: 250, initialY: 250, velY: -0.5 }, // Ball 5
     ]);
@@ -388,7 +388,22 @@ const Game = ({ socket, gameType }) => {
                 <div className="game" ref={gameRef} style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}>
                     <div className="timer">Time Left: {timeLeft}</div>
                     {!gameStarted && (
-                        <button onClick={() => setGameStarted(true)}>Start Game</button>
+                      <button 
+                      onClick={() => setGameStarted(true)}
+                      style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        height: "100vh",
+                        width: "100%",
+                        border: "white",
+                        background: "none",
+                        cursor: "pointer",
+                        color:"red"
+                      }}
+                    >
+                      Start Game
+                    </button>
                     )}
                     {gameStarted && (
                         <div className="viewport" style={gameContainerStyle}>
