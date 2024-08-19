@@ -178,6 +178,13 @@ io.on('connection', (socket) => {
       socket.broadcast.emit('updatePlatformerGameState', newGameState);
     }
   });
+
+  socket.on('updateTimer', (newTime) => {
+    if (socket === platformerHostSocket && platformerGameState) {
+      platformerGameState.timeLeft = newTime;
+      socket.broadcast.emit('updateTimer', newTime);
+    }
+  });
 });
 
 app.use(express.static(path.join(__dirname, 'build')));

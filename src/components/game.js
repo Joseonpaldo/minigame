@@ -166,7 +166,19 @@ const Game = ({ socket, gameType }) => {
             setIsGameOver(initialState.isGameOver || false);
         });
 
-    }, [role, gameType, socket,balls,isGameOver,player,rockets,timeLeft]);
+        socket.on('updateTimer', (newTime) => {
+            setTimeLeft(newTime);
+        });
+
+        socket.on('playerPosition', (newPlayerState) => {
+            setPlayer(newPlayerState);
+        });
+
+        // socket.on('updateBullets', (newBullets) => {
+        //     setBullets(newBullets);
+        // });
+
+    }, [role, gameType, socket, balls, isGameOver, player, rockets, timeLeft]);
 
     useEffect(() => {
         if (!gameStarted) return;
@@ -178,12 +190,17 @@ const Game = ({ socket, gameType }) => {
                     setIsGameOver(true);
                     return 0;
                 }
-                return prev - 1;
+                const newTime = prev - 1;
+                if (role === 'host') {
+                    socket.emit('updateTimer', newTime); // Emit the updated timer to the server
+                    console.log('updateTimer', newTime);
+                }
+                return newTime;
             });
         }, 1000);
 
         return () => clearInterval(timerInterval);
-    }, [gameStarted]);
+    }, [gameStarted, role, socket]);
 
     useEffect(() => {
         if (!gameStarted) return;
@@ -216,7 +233,7 @@ const Game = ({ socket, gameType }) => {
 
                 let newX = prev.x;
                 if (prev.isJumping) {
-                    newX = prev.x + 1 * prev.direction;
+                    newX = prev.x + 2 * prev.direction;
                 }
 
                 let isOnPlatform = false;
