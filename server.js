@@ -38,7 +38,7 @@ io.on('connection', (socket) => {
           aliens: [],
           bullets: [],
           specialEntities: [],
-          timeLeft: 100,
+          timeLeft: 50,
         };
         roleAssigned = true;
         socket.emit('role', 'host');
@@ -58,7 +58,6 @@ io.on('connection', (socket) => {
           player: { x: 0, y: 0 },
           rockets: [],
           balls: [],
-          timeLeft: 60,
           isGameOver: false,
         };
         roleAssigned = true;
@@ -102,14 +101,18 @@ io.on('connection', (socket) => {
       };
       console.log('Alien Shooting initial game state set by host');
     } else if (socket === platformerHostSocket) {
+      console.log('Platformer Host Initial');
       platformerGameState = {
         player: { x: 0, y: 0 },
         rockets: [],
-        balls: [],
         timeLeft: 60,
         isGameOver: false,
+        ladders: [],
+        portal: [],
+        
         ...initialState,  // Use the initialState provided by the host to override defaults
       };
+      
       console.log('Platformer initial game state set by host');
     }
   });
@@ -132,6 +135,9 @@ io.on('connection', (socket) => {
     if (socket === alienHostSocket && alienGameState) {
       alienGameState.bullets.push(newBullet);
       socket.broadcast.emit('newBullet', newBullet);
+    } else if (socket === platformerHostSocket && platformerGameState) {
+      platformerGameState.bullets.push(newBullet);
+      socket.broadcast.emit('newBullet', newBullet);
     }
   });
 
@@ -146,6 +152,11 @@ io.on('connection', (socket) => {
     if (socket === alienHostSocket && alienGameState) {
       alienGameState.timeLeft = newTime;
       socket.broadcast.emit('updateTimer', newTime);
+      console.log("time updated");
+    } else if (socket === platformerHostSocket && platformerGameState) {
+      platformerGameState.timeLeft = newTime;
+      socket.broadcast.emit('updateTimer', newTime);
+      console.log("time updated");
     }
   });
 
@@ -161,6 +172,9 @@ io.on('connection', (socket) => {
     if (socket === alienHostSocket && alienGameState) {
       alienGameState.bullets = bullets;
       socket.broadcast.emit('updateBullets', bullets);
+    } else if (socket === platformerHostSocket && platformerGameState) {
+      platformerGameState.bullets = bullets;
+      socket.broadcast.emit('updateBullets', bullets);
     }
   });
 
@@ -172,17 +186,26 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('requestInitialGameState', () => {
+    console.log('Initial game state requested by viewer');
+    if (platformerHostSocket && platformerGameState) {
+      // Send the current game state to the newly connected viewer
+      socket.emit('initialGameState', platformerGameState);
+      console.log(platformerGameState);
+    }
+  });
+
+  socket.on('updateBalls', (newBalls) => {
+    if (socket === platformerHostSocket && platformerGameState) {
+      platformerGameState.balls = newBalls;
+      socket.broadcast.emit('updateBalls', newBalls);
+    }
+  });
+
   socket.on('updatePlatformerGameState', (newGameState) => {
     if (socket === platformerHostSocket && platformerGameState) {
       platformerGameState = { ...platformerGameState, ...newGameState };
       socket.broadcast.emit('updatePlatformerGameState', newGameState);
-    }
-  });
-
-  socket.on('updateTimer', (newTime) => {
-    if (socket === platformerHostSocket && platformerGameState) {
-      platformerGameState.timeLeft = newTime;
-      socket.broadcast.emit('updateTimer', newTime);
     }
   });
 });
@@ -190,8 +213,7 @@ io.on('connection', (socket) => {
 app.use(express.static(path.join(__dirname, 'build')));
 
 app.get('*', (req, res) => {
-  //res.sendFile(path.join(__dirname, 'build', 'index.html'));
-  console.log("in")
+  console.log("in");
 });
 
 server.listen(4000, () => {

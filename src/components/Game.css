@@ -38,7 +38,7 @@
 }
 
 .player.moving {
-    background-image: url('/public/move.gif'); /* Use the correct path for the moving image */
+    background-image: url('/public/mover.gif'); /* Use the correct path for the moving image */
 }
 
 .player.left {
