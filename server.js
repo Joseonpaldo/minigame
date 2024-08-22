@@ -199,6 +199,16 @@ io.on('connection', (socket) => {
     if (socket === platformerHostSocket && platformerGameState) {
       platformerGameState.balls = newBalls;
       socket.broadcast.emit('updateBalls', newBalls);
+      
+      
+    }
+  });
+
+  socket.on('updateRockets', (newRockets) => {
+    if (socket === platformerHostSocket && platformerGameState) {
+      platformerGameState.rockets = newRockets;
+      socket.broadcast.emit('updateRockets');
+      console.log('updateRockets event received and broadcasted:');
     }
   });
 
