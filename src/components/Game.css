@@ -139,7 +139,7 @@
 
 .ball {
     position: absolute;
-    background-image: url('/public/blueball.png'); /* Use the correct path */
+    background-image: url('/public/slime.png'); /* Use the correct path */
     background-size: contain; /* Ensure the image fits within the element */
     background-repeat: no-repeat; /* Prevent image repetition */
     background-position: center; /* Center the image */

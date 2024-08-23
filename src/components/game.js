@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './Game.css';
 
-const GRAVITY = 0.003; // Reduced gravity for slower falling
+const GRAVITY = 0.003;
 const JUMP_STRENGTH = 0.6;
 const KNOCKBACK = 50;
 const PLAYER_WIDTH = 40;
@@ -25,46 +25,59 @@ const Game = ({ socket }) => {
         isWalking: false,
     });
     const [rockets, setRockets] = useState([]);
-    const [balls, setBalls] = useState([
-        { x: 850, y: 650, initialY: 650, velY: -0.15 },
-        { x: 400, y: 450, initialY: 450, velY: -0.15 },
-        { x: 400, y: 250, initialY: 250, velY: -0.15 },
-        { x: 800, y: 250, initialY: 250, velY: -0.1 },
-        { x: 600, y: 250, initialY: 250, velY: -0.05 },
-    ]);
+    const [balls, setBalls] = useState([]);
     const [timeLeft, setTimeLeft] = useState(60);
     const [isGameOver, setIsGameOver] = useState(false);
     const [gameStarted, setGameStarted] = useState(false);
+    const [platforms, setPlatforms] = useState([]);
+    const [ladders, setLadders] = useState([]);
+    const [portal, setPortal] = useState(null);
+    const startGame = () => {
+        setGameStarted(true);
+        socket.emit('startGame');
+        console.log('startgame');  // Trigger the game start on the server
+      };
 
-    const platforms = [
-        { x: 0, y: 700, width: 300, height: 20 },
-        { x: 400, y: 700, width: 300, height: 20 },
-        { x: 800, y: 700, width: 300, height: 20 },
-        { x: 0, y: 500, width: 100, height: 20 },
-        { x: 150, y: 500, width: 70, height: 20 },
-        { x: 300, y: 500, width: 200, height: 20 },
-        { x: 400, y: 500, width: 100, height: 20 },
-        { x: 600, y: 500, width: 100, height: 20 },
-        { x: 800, y: 500, width: 100, height: 20 },
-        { x: 1000, y: 500, width: 100, height: 20 },
-        { x: 0, y: 300, width: 100, height: 20 },
-        { x: 170, y: 300, width: 100, height: 20 },
-        { x: 350, y: 300, width: 130, height: 20 },
-        { x: 400, y: 300, width: 50, height: 20 },
-        { x: 600, y: 300, width: 100, height: 20 },
-        { x: 800, y: 300, width: 50, height: 20 },
-        { x: 900, y: 280, width: 50, height: 20 },
-        { x: 1000, y: 250, width: 100, height: 20 },
-    ];
+    // Fetch map, balls, and rockets data from the server
+    useEffect(() => {
+        socket.emit('requestInitialGameState');
 
-    const ladders = [
-        { x: 1000, y: 500, height: 200 },
-        { x: 0, y: 300, height: 200 },
-    ];
+        socket.on('initialGameState', (gameState) => {
+            setPlatforms(gameState.platforms);
+            setLadders(gameState.ladders);
+            setBalls(gameState.balls);
+            setRockets(gameState.rockets);
+            setPortal(gameState.portal);
+            setTimeLeft(gameState.timeLeft || 60);
+            setIsGameOver(gameState.isGameOver);
+        });
 
-    const portal = { x: 1110, y: 200, width: 10, height: 60 };
+        
 
-    const gameRef = useRef(null);
+        socket.on('updateRockets', (newRockets) => {
+            setRockets(newRockets);
+        });
+
+        socket.on('updateBalls', (newBalls) => {
+            setBalls(newBalls);
+        });
+
+        socket.on('updateTimer', (newTime) => {
+            setTimeLeft(newTime);
+        });
+
+        socket.on('gameOver', (gameOverState) => {
+            setIsGameOver(gameOverState);
+        });
+
+        return () => {
+            socket.off('initialGameState');
+            socket.off('updateRockets');
+            socket.off('updateBalls');
+            socket.off('updateTimer');
+            socket.off('gameOver');
+        };
+    }, [socket]);
 
     const handleKeyDown = useCallback((e) => {
         e.preventDefault();
@@ -74,26 +87,24 @@ const Game = ({ socket }) => {
             let isWalking = false;
 
             switch (e.key) {
-                case 'ArrowUp':
-                case 'ArrowDown':
-                    return prev;
                 case 'ArrowLeft':
                     isWalking = true;
                     const newPosLeft = { ...prev, x: prev.x - 10, direction: -1, isWalking };
-                    socket.emit('playerPosition', newPosLeft); // Emit player position on key press
+                    socket.emit('playerPosition', newPosLeft);
                     return newPosLeft;
                 case 'ArrowRight':
                     isWalking = true;
                     const newPosRight = { ...prev, x: prev.x + 10, direction: 1, isWalking };
-                    socket.emit('playerPosition', newPosRight); // Emit player position on key press
+                    socket.emit('playerPosition', newPosRight);
                     return newPosRight;
                 case ' ':
                     if (!prev.isJumping) {
-                        const jumpPos = { ...prev, velY: -JUMP_STRENGTH, isJumping: true, isWalking };
-                        socket.emit('playerPosition', jumpPos); // Emit player position on jump
+                        const jumpPos = { ...prev, velY: -JUMP_STRENGTH, isJumping: true };
+                        socket.emit('playerPosition', jumpPos);
                         return jumpPos;
                     }
-                case 'g':
+                    return prev;
+                case 'g': // Handle ladder interaction with the 'g' key
                     if (prev.onLadder) {
                         let targetY;
                         ladders.forEach((ladder) => {
@@ -108,17 +119,16 @@ const Game = ({ socket }) => {
                         });
                         if (targetY !== undefined) {
                             const ladderPos = { ...prev, y: targetY, velY: 0, onLadder: false };
-                            socket.emit('playerPosition', ladderPos); // Emit player position on ladder movement
+                            socket.emit('playerPosition', ladderPos);
                             return ladderPos;
                         }
                     }
-                    break;
+                    return prev;
                 default:
                     return prev;
             }
-            return { ...prev, isWalking };
         });
-    }, [socket]);
+    }, [socket, ladders]);
 
     const handleKeyUp = useCallback((e) => {
         e.preventDefault();
@@ -126,7 +136,7 @@ const Game = ({ socket }) => {
             if (!prev) return prev;
             if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
                 const stopWalkingPos = { ...prev, isWalking: false };
-                socket.emit('playerPosition', stopWalkingPos); // Emit player position on key release
+                socket.emit('playerPosition', stopWalkingPos);
                 return stopWalkingPos;
             }
             return prev;
@@ -143,50 +153,7 @@ const Game = ({ socket }) => {
     }, [handleKeyDown, handleKeyUp]);
 
     useEffect(() => {
-        const sendInitialGameState = () => {
-            const gameState = {
-                player: { x: 0, y: 0 },  // Default player position
-                rockets: [],  // Default empty array for rockets
-                balls: [],  // Default empty array for balls
-                timeLeft: timeLeft,  // Default time left
-                isGameOver: false,  // Default game over status
-            };
-            socket.emit('setInitialGameState', gameState);
-           
-        };
-
-        socket.on('requestInitialGameState', sendInitialGameState);
-
-        return () => {
-            socket.off('requestInitialGameState', sendInitialGameState);
-        };
-    }, [socket, player, rockets, balls]);
-
-    useEffect(() => {
-        if (!gameStarted) return;
-
-        const timerInterval = setInterval(() => {
-            setTimeLeft((prev) => {
-                if (prev <= 1) {
-                    clearInterval(timerInterval);
-                    setIsGameOver(true);
-                    socket.emit('gameOver', true); // Emit game over state
-                    return 0;
-                }
-                const newTime = prev - 1;
-                socket.emit('updateTimer', newTime); // Emit the updated timer to the server
-                
-                return newTime;
-            });
-        }, 1000);
-
-        return () => clearInterval(timerInterval);
-    }, [gameStarted, socket]);
-
-    useEffect(() => {
-        if (!gameStarted) return;
-
-        const rocketInterval = setInterval(() => {
+        const handleShootRocket = () => {
             const newRockets = [
                 { x: GAME_WIDTH, y: 230, direction: 'left' },
                 { x: 0, y: 260, direction: 'right' },
@@ -195,16 +162,15 @@ const Game = ({ socket }) => {
                 { x: GAME_WIDTH, y: 680, direction: 'left' },
                 { x: 0, y: 600, direction: 'right' }
             ];
-            setRockets((prev) => {
-                const updatedRockets = [...prev, ...newRockets];
-                socket.emit('updateRockets', updatedRockets); // Emit new rockets to viewers
-                
-                return updatedRockets;
-            });
-        }, 5000);
-
-        return () => clearInterval(rocketInterval);
-    }, [gameStarted, socket]);
+            setRockets(prev => [...prev, ...newRockets]);
+        };
+    
+        socket.on('shoot', handleShootRocket);
+    
+        return () => {
+            socket.off('shoot', handleShootRocket);
+        };
+    }, [socket]);
 
     useEffect(() => {
         if (!gameStarted) return;
@@ -240,7 +206,7 @@ const Game = ({ socket }) => {
 
                 if (newY + PLAYER_HEIGHT > GAME_HEIGHT) {
                     setIsGameOver(true);
-                    socket.emit('gameOver', true); // Emit game over state
+                    socket.emit('gameOver', true);
                 }
 
                 let onLadder = false;
@@ -266,7 +232,7 @@ const Game = ({ socket }) => {
                     isWalking: false
                 };
 
-                socket.emit('playerPosition', updatedPlayer); // Emit player position on each game interval
+                socket.emit('playerPosition', updatedPlayer);
 
                 return updatedPlayer;
             });
@@ -275,19 +241,6 @@ const Game = ({ socket }) => {
                 ...rocket,
                 x: rocket.x + (rocket.direction === 'left' ? -0.3 : 0.3),
             })).filter(rocket => rocket.x > 0 && rocket.x < GAME_WIDTH));
-
-            setBalls((prevBalls) =>
-                prevBalls.map((ball) => {
-                    let newY = ball.y + ball.velY;
-                    if (newY <= ball.initialY - BALL_JUMP_HEIGHT || newY >= ball.initialY) {
-                        const updatedBall = { ...ball, y: newY, velY: -ball.velY };
-                        socket.emit('updateBalls', prevBalls); // Emit updated balls to viewers
-                        return updatedBall;
-                    }
-                    socket.emit('updateBalls', prevBalls); // Emit updated balls to viewers on every movement
-                    return { ...ball, y: newY };
-                })
-            );
 
             setPlayer((prev) => {
                 if (!prev || prev.isImmune) return prev;
@@ -349,7 +302,7 @@ const Game = ({ socket }) => {
                     prev.y + PLAYER_HEIGHT > portal.y
                 ) {
                     setIsGameOver(true);
-                    socket.emit('gameOver', true); // Emit game over state
+                    socket.emit('gameOver', true);
                     alert('You Win!');
                 }
                 return prev;
@@ -377,26 +330,30 @@ const Game = ({ socket }) => {
         <div className="modal-overlay">
             <div className="modal-content">
                 <button className="close-button" onClick={() => setGameStarted(false)}>X</button>
-                <div className="game" ref={gameRef} style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}>
+                <div className="game" style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}>
                     <div className="timer">Time Left: {timeLeft}</div>
                     {!gameStarted && (
-                        <button
-                            onClick={() => setGameStarted(true)}
-                            style={{
-                                display: "flex",
-                                justifyContent: "center",
-                                alignItems: "center",
-                                height: "100vh",
-                                width: "100%",
-                                border: "white",
-                                background: "none",
-                                cursor: "pointer",
-                                color: "red"
-                            }}
-                        >
-                            Start Game
-                        </button>
-                    )}
+    <button
+        onClick={() => {
+            setGameStarted(true);
+            startGame(); // This will start the timer and the game logic
+        }}
+        style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            height: "100vh",
+            width: "100%",
+            border: "white",
+            background: "none",
+            cursor: "pointer",
+            color: "red"
+        }}
+    >
+        Start Game
+    </button>
+)}
+
                     {gameStarted && (
                         <div className="viewport" style={gameContainerStyle}>
                             <div
