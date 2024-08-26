@@ -7,6 +7,7 @@ const PLAYER_WIDTH = 40;
 const PLAYER_HEIGHT = 40;
 const BALL_SIZE = 50;
 const ZOOM_LEVEL = 2;
+const GRAVITY = 0.006; // Consistent with the Game component
 
 const Viewer = ({ socket }) => {
     const [player, setPlayer] = useState(null);
@@ -27,7 +28,6 @@ const Viewer = ({ socket }) => {
             setPlatforms(gameState.platforms);
             setLadders(gameState.ladders);
             setBalls(gameState.balls);
-            setRockets(gameState.rockets);
             setPortal(gameState.portal);
             setTimeLeft(gameState.timeLeft || null);
             setIsGameOver(gameState.isGameOver);
@@ -38,12 +38,14 @@ const Viewer = ({ socket }) => {
             setPlayer(newPlayerState);
         });
 
-        socket.on('updateRockets', (newRockets) => {
-            setRockets(newRockets);
+        socket.on('spawnRockets', (newRockets) => {
+            setRockets((prev) => [...prev, ...newRockets]);
         });
 
-        socket.on('updateBalls', (newBalls) => {
-            setBalls(newBalls);
+        socket.on('ballBounce', (updatedBall) => {
+            setBalls((prev) => prev.map((ball) =>
+                ball.x === updatedBall.x ? { ...ball, y: updatedBall.y, velY: updatedBall.velY } : ball
+            ));
         });
 
         socket.on('updateTimer', (newTime) => {
@@ -57,8 +59,8 @@ const Viewer = ({ socket }) => {
         return () => {
             socket.off('initialGameState');
             socket.off('playerPosition');
-            socket.off('updateRockets');
-            socket.off('updateBalls');
+            socket.off('spawnRockets');
+            socket.off('ballBounce');
             socket.off('updateTimer');
             socket.off('gameOver');
         };
@@ -90,13 +92,41 @@ const Viewer = ({ socket }) => {
                 }
             }
 
+            // Handle ball movement with bouncing logic
+            setBalls((prev) => prev.map((ball) => {
+                let newY = ball.y + ball.velY;
+                const topLimit = ball.initialY - 50; // Adjust this value as needed
+                const bottomLimit = ball.initialY;
+                let bounced = false;
+
+                if (newY < topLimit) {
+                    newY = topLimit;
+                    ball.velY = -ball.velY;
+                    bounced = true;
+                }
+
+                if (newY > bottomLimit) {
+                    newY = bottomLimit;
+                    ball.velY = -ball.velY;
+                    bounced = true;
+                }
+
+                return { ...ball, y: newY };
+            }));
+
+            // Handle rocket movement on the client side
+            setRockets((prev) => prev.map((rocket) => ({
+                ...rocket,
+                x: rocket.x + (rocket.direction === 'left' ? -0.3 : 0.3),
+            })).filter(rocket => rocket.x > 0 && rocket.x < GAME_WIDTH));
+
             animationFrameId = requestAnimationFrame(gameInterval);
         };
 
         gameInterval();
 
         return () => cancelAnimationFrame(animationFrameId);
-    }, [gameStarted, player, portal, socket]);
+    }, [gameStarted, player, portal, rockets, balls, socket]);
 
     const gameContainerStyle = {
         transform: `scale(${ZOOM_LEVEL})`,
@@ -112,7 +142,7 @@ const Viewer = ({ socket }) => {
         <div className="modal-overlay">
             <div className="modal-content">
                 <div className="game" style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}>
-                    <div className="timer">Time Left: {timeLeft}</div>
+                    <div className="timer">Viewer Time Left: {timeLeft}</div>
                     <div className="viewport" style={gameContainerStyle}>
                         {player && (
                             <div

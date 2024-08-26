@@ -18,13 +18,10 @@ const io = socketIo(server, {
   }
 });
 
-let alienHostSocket = null;
-let platformerHostSocket = null;
-let alienGameState = null;
-let platformerGameState = null;
-let gameInterval = null;  // Interval for updating the game time
+let gameSessions = [];  // Array to store all game sessions
 
-// Define game environment data on the server
+const MAX_PLAYERS_PER_SESSION = 4; // Max number of players per game session
+
 const platforms = [
     { x: 0, y: 700, width: 300, height: 20 },
     { x: 400, y: 700, width: 300, height: 20 },
@@ -53,225 +50,124 @@ const ladders = [
 
 const portal = { x: 1110, y: 200, width: 10, height: 60 };
 
-// Physics constants
-const GRAVITY = 0.1;
-const DAMPING = 0.98;
 
 io.on('connection', (socket) => {
   console.log('New client connected');
 
-  let roleAssigned = false;
+  let currentSession = null;
 
   socket.on('joinGame', (gameType) => {
-    if (roleAssigned) return;
-
-    if (gameType === 'alienShooting') {
-      if (!alienHostSocket) {
-        alienHostSocket = socket;
-        alienGameState = { 
-          spaceshipPosition: 50,
-          aliens: [],
-          bullets: [],
-          specialEntities: [],
-          timeLeft: 50,
-        };
-        roleAssigned = true;
-        socket.emit('role', 'host');
-        console.log('Alien Shooting Host assigned');
-      } else {
-        socket.emit('role', 'viewer');
-        roleAssigned = true;
-        console.log('Alien Shooting Viewer assigned');
-        if (alienGameState) {
-          socket.emit('initialGameState', alienGameState);
-        }
-      }
-    } else if (gameType === 'platformer') {
-      if (!platformerHostSocket) {
-        platformerHostSocket = socket;
-        platformerGameState = { 
-          rockets: [],
-          balls: [
-            { x: 850, y: 650, initialY: 650, velY: -0.4 },
-          ],
-          platforms: platforms,
-          ladders: ladders,
-          portal: portal,
-          timeLeft: 60,
-          isGameOver: false,
-        };
-        roleAssigned = true;
-        socket.emit('role', 'host');
-        console.log('Platformer Host assigned');
-      } else {
-        socket.emit('role', 'viewer');
-        roleAssigned = true;
-        console.log('Platformer Viewer assigned');
-        if (platformerGameState) {
-          socket.emit('initialGameState', platformerGameState);
-        }
-      }
+    // Find or create a session with space for a new player
+    currentSession = findOrCreateSession(gameType);
+    if (!currentSession) {
+      socket.emit('error', 'No available sessions');
+      return;
     }
+
+    currentSession.players.push(socket);
+    socket.join(currentSession.id);
+    console.log(`Client joined session ${currentSession.id}`);
+
+    if (currentSession.players.length === 1) {
+      // First player becomes the host
+      currentSession.host = socket;
+      setupNewGameState(currentSession, gameType);
+      socket.emit('role', 'host');
+    } else {
+      socket.emit('role', 'viewer');
+      socket.emit('initialGameState', currentSession.gameState);
+    }
+
+    // Broadcast the player count update
+    io.in(currentSession.id).emit('playerCount', currentSession.players.length);
   });
 
   socket.on('disconnect', () => {
     console.log('Client disconnected');
-    if (socket === alienHostSocket) {
-      alienHostSocket = null;
-      alienGameState = null;
-      console.log('Alien Shooting Host disconnected');
+    if (currentSession) {
+        if (socket === currentSession.host) {
+            // End the session if the host disconnects
+            console.log(`Session ${currentSession.id} ended because the host disconnected.`);
+            
+            // Clear any intervals or timeouts related to this session
+            if (currentSession.gameInterval) {
+                clearInterval(currentSession.gameInterval);
+            }
+            if (currentSession.ballBounceInterval) {
+                clearInterval(currentSession.ballBounceInterval);
+            }
+            
+            // Notify all clients that the game is over and session is closed
+            io.in(currentSession.id).emit('gameOver', true);
+            io.in(currentSession.id).emit('sessionClosed');
+            
+            // Remove the session and disconnect all players
+            gameSessions = gameSessions.filter(session => session !== currentSession);
+            currentSession.players.forEach(player => player.disconnect(true));
+        } else {
+            // If not the host, just remove the player from the session
+            currentSession.players = currentSession.players.filter(player => player !== socket);
+            io.in(currentSession.id).emit('playerCount', currentSession.players.length);
+        }
     }
-    if (socket === platformerHostSocket) {
-      platformerHostSocket = null;
-      platformerGameState = null;
-      clearInterval(gameInterval);  // Clear the interval when the host disconnects
-      gameInterval = null;  // Reset the game interval variable
-      console.log('Platformer Host disconnected');
-    }
-  });
+});
 
-  socket.on('setInitialGameState', (initialState) => {
-    if (socket === alienHostSocket) {
-      alienGameState = {
-        spaceshipPosition: 50,
-        aliens: [],
-        bullets: [],
-        specialEntities: [],
-        timeLeft: 100,
-        ...initialState,
-      };
-      console.log('Alien Shooting initial game state set by host');
-    } else if (socket === platformerHostSocket) {
-      platformerGameState = {
-        rockets: [],
-        balls: platformerGameState.balls,
-        platforms: platforms,
-        ladders: ladders,
-        portal: portal,
-        timeLeft: platformerGameState.timeLeft,
-        isGameOver: false,
-        ...initialState,
-      };
-      console.log('Platformer initial game state set by host');
-    }
-  });
+  
 
   socket.on('spaceshipPosition', (newPosition) => {
-    if (socket === alienHostSocket && alienGameState) {
-      alienGameState.spaceshipPosition = newPosition;
-      socket.broadcast.emit('spaceshipPosition', newPosition);
+    if (socket === currentSession.host && currentSession.gameState) {
+      currentSession.gameState.spaceshipPosition = newPosition;
+      io.in(currentSession.id).emit('spaceshipPosition', newPosition);
     }
   });
 
   socket.on('newAlien', (newAlien) => {
-    if (socket === alienHostSocket && alienGameState) {
-      alienGameState.aliens.push(newAlien);
-      socket.broadcast.emit('newAlien', newAlien);
+    if (socket === currentSession.host && currentSession.gameState) {
+      currentSession.gameState.aliens.push(newAlien);
+      io.in(currentSession.id).emit('newAlien', newAlien);
     }
   });
 
   socket.on('newRocket', (newRocket) => {
-    if (socket === platformerHostSocket && platformerGameState) {
-      platformerGameState.rockets.push(newRocket);
-      socket.broadcast.emit('newRocket', newRocket);
+    if (socket === currentSession.host && currentSession.gameState) {
+      currentSession.gameState.rockets.push(newRocket);
+      io.in(currentSession.id).emit('newRocket', newRocket);
     }
   });
 
   socket.on('newSpecialEntity', (newSpecialEntity) => {
-    if (socket === alienHostSocket && alienGameState) {
-      alienGameState.specialEntities.push(newSpecialEntity);
-      socket.broadcast.emit('newSpecialEntity', newSpecialEntity);
+    if (socket === currentSession.host && currentSession.gameState) {
+      currentSession.gameState.specialEntities.push(newSpecialEntity);
+      io.in(currentSession.id).emit('newSpecialEntity', newSpecialEntity);
     }
   });
 
-  const startGameTimer = () => {
-    if (gameInterval) return;  // Prevent multiple intervals from being set
-
-    gameInterval = setInterval(() => {
-      if (!platformerGameState || platformerGameState.isGameOver) return;
-
-      platformerGameState.timeLeft -= 1;
-
-      io.emit('updateTimer', platformerGameState.timeLeft);
-
-      if (platformerGameState.timeLeft <= 0) {
-        platformerGameState.isGameOver = true;
-        io.emit('gameOver', true); // Emit game over state
-        clearInterval(gameInterval);  // Clear the interval when the game is over
-        gameInterval = null;  // Reset the game interval variable
-        return;
-      }
-
-      if (platformerGameState.timeLeft % 5 === 0) {
-        // Spawn rockets every 5 seconds
-        const rockets = [
-          { x: 1200, y: 230, direction: 'left' },
-          { x: 0, y: 260, direction: 'right' },
-          { x: 0, y: 390, direction: 'right' },
-          { x: 1200, y: 450, direction: 'left' },
-          { x: 1200, y: 680, direction: 'left' },
-          { x: 0, y: 600, direction: 'right' }
-        ];
-        platformerGameState.rockets.push(...rockets);
-        io.emit('updateRockets', platformerGameState.rockets);  // Broadcast the new rockets to all clients
-        console.log('Rockets spawned');
-      }
-    }, 1000);  // Ensure the interval is exactly 1 second
-  };
-
-  const updateRocketPositions = () => {
-    if (!platformerGameState || !platformerGameState.rockets) return;
-
-    platformerGameState.rockets = platformerGameState.rockets.map((rocket) => {
-      const newX = rocket.x + (rocket.direction === 'left' ? -1.3 : 1.3);
-      return { ...rocket, x: newX };
-    });
-    io.emit('updateRockets', platformerGameState.rockets); // Broadcast the updated positions to all clients
-  };
-
-  const updateBallPositions = () => {
-    if (!platformerGameState || !platformerGameState.balls) return;
-
-    platformerGameState.balls = platformerGameState.balls.map((ball) => {
-      let newY = ball.y + ball.velY;
-      if (newY <= ball.initialY - 150 || newY >= ball.initialY) {
-        ball.velY = -ball.velY;
-      }
-      return { ...ball, y: newY };
-    });
-    io.emit('updateBalls', platformerGameState.balls);
-  };
-
   socket.on('startGame', () => {
-    if (platformerHostSocket && !platformerGameState.isGameOver) {
-      startGameTimer();  // Start the timer when the game starts
+    if (currentSession.host === socket && !currentSession.gameState.isGameOver) {
+      startGameTimer(currentSession);  // Start the timer when the game starts
+      // startBallBouncing is removed, as it's no longer necessary
     }
   });
 
   socket.on('requestInitialGameState', () => {
-    if (platformerHostSocket && platformerGameState) {
-      socket.emit('initialGameState', platformerGameState);
-      console.log('gave init state');
-    }
-  });
-
-  socket.on('updateBalls', (newBalls) => {
-    if (socket === platformerHostSocket && platformerGameState) {
-      platformerGameState.balls = newBalls;
-      socket.broadcast.emit('updateBalls', newBalls);
+    if (currentSession.gameState) {
+      socket.emit('initialGameState', currentSession.gameState);
+      console.log('Gave initial state');
     }
   });
 
   socket.on('playerPosition', (newPlayerState) => {
-    if (socket === platformerHostSocket && platformerGameState) {
-      platformerGameState.player = newPlayerState;
-      socket.broadcast.emit('playerPosition', newPlayerState);
+    if (socket === currentSession.host && currentSession.gameState) {
+      currentSession.gameState.player = newPlayerState;
+      io.in(currentSession.id).emit('playerPosition', newPlayerState);
     }
   });
 
+  // Update the ball positions regularly
   setInterval(() => {
-    updateBallPositions();
-    updateRocketPositions();
+    if (currentSession) {
+      updateBallPositions(currentSession);
+    }
   }, 1000 / 60); // Update positions 60 times per second
 });
 
@@ -285,3 +181,135 @@ server.listen(4000, () => {
   console.log('Server is running on port 4000');
 });
 
+// Helper Functions
+
+function findOrCreateSession(gameType) {
+  // Find a session with space available
+  let session = gameSessions.find(s => s.gameType === gameType && s.players.length < MAX_PLAYERS_PER_SESSION);
+  
+  if (!session) {
+    // If no session found, create a new one
+    session = {
+      id: `session-${gameSessions.length + 1}`,
+      gameType: gameType,
+      players: [],
+      host: null,
+      gameState: null,
+      gameInterval: null,  // Interval for updating the game time
+    };
+    gameSessions.push(session);
+  }
+  
+  return session;
+}
+
+function setupNewGameState(session, gameType) {
+  if (gameType === 'alienShooting') {
+    session.gameState = { 
+      spaceshipPosition: 50,
+      aliens: [],
+      bullets: [],
+      specialEntities: [],
+      timeLeft: 50,
+    };
+    console.log('Alien Shooting game state initialized');
+  } else if (gameType === 'platformer') {
+    session.gameState = { 
+      rockets: [],
+      balls: [
+        { x: 850, y: 650, initialY: 650, velY: -2 },  // Adjusted initial velY for faster bouncing
+        { x: 850, y: 650, initialY: 650, velY: -1.5 },
+            { x: 400, y: 250, initialY: 250, velY: -1.5 },
+            { x: 800, y: 250, initialY: 250, velY: -1 },
+            { x: 600, y: 650, initialY: 250, velY: -0.5 },
+      ],
+      platforms: platforms,
+      ladders: ladders,
+      portal: portal,
+      timeLeft: 60,
+      isGameOver: false,
+    };
+    console.log('Platformer game state initialized');
+  }
+}
+
+function startGameTimer(session) {
+  if (session.gameInterval) return;  // Prevent multiple intervals from being set
+
+  session.gameInterval = setInterval(() => {
+    if (!session.gameState || session.gameState.isGameOver) return;
+
+    session.gameState.timeLeft -= 1;
+
+    io.in(session.id).emit('updateTimer', session.gameState.timeLeft);
+
+    if (session.gameState.timeLeft <= 0) {
+      session.gameState.isGameOver = true;
+      io.in(session.id).emit('gameOver', true); // Emit game over state
+
+      clearInterval(session.gameInterval);  // Clear the interval when the game is over
+      session.gameInterval = null;  // Reset the game interval variable
+      
+      // Remove the session after the game is over
+      gameSessions = gameSessions.filter(s => s.id !== session.id);
+      io.in(session.id).emit('sessionClosed'); // Notify all clients that the session is closed
+
+      // Disconnect all players in the session
+      session.players.forEach(player => player.disconnect(true));
+      
+      return;
+    }
+
+    if (session.gameState.timeLeft % 5 === 0) {
+      // Spawn rockets every 5 seconds
+      const rockets = [
+        { x: 1200, y: 230, direction: 'left' },
+        { x: 0, y: 260, direction: 'right' },
+        { x: 0, y: 390, direction: 'right' },
+        { x: 1200, y: 450, direction: 'left' },
+        { x: 1200, y: 680, direction: 'left' },
+        { x: 0, y: 600, direction: 'right' }
+      ];
+      
+      // Send rocket spawn info to clients
+      io.in(session.id).emit('spawnRockets', rockets);
+      console.log('Rockets spawned');
+    }
+  }, 1000);  // Ensure the interval is exactly 1 second
+}
+
+function updateBallPositions(session) {
+  if (!session.gameState || !session.gameState.balls) return;
+
+  session.gameState.balls = session.gameState.balls.map((ball) => {
+      let newY = ball.y + ball.velY;
+
+      // Check for bounce at top and bottom limits
+      const topLimit = ball.initialY - 50; // Adjust this value as needed
+      const bottomLimit = ball.initialY;
+
+      let bounced = false;
+
+      // Handle top bounce
+      if (newY < topLimit) {
+          newY = topLimit;
+          ball.velY = -ball.velY; // Reverse direction
+          bounced = true;
+      }
+
+      // Handle bottom bounce
+      if (newY > bottomLimit) {
+          newY = bottomLimit;
+          ball.velY = -ball.velY; // Reverse direction
+          bounced = true;
+      }
+
+      // Notify clients only if a bounce occurred
+      if (bounced) {
+          io.in(session.id).emit('ballBounce', ball); // Emit ballBounce event
+      }
+
+      // Update ball position locally on the server
+      return { ...ball, y: newY };
+  });
+}
