@@ -1,17 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './Game.css';
 
-const GRAVITY = 0.006;
-const JUMP_STRENGTH = 1;
+const GRAVITY = 0.2;
+const JUMP_STRENGTH = 6;
 const KNOCKBACK = 50;
 const PLAYER_WIDTH = 40;
 const PLAYER_HEIGHT = 40;
 const GAME_WIDTH = 1200;
 const GAME_HEIGHT = 800;
 const BALL_SIZE = 50;
+const BALL_MOVE_AMOUNT = 100; // Updated to 100 pixels
 const ZOOM_LEVEL = 2;
 
-const Game = ({ socket }) => {
+const Game = ({ socket, gameType }) => {
     const [player, setPlayer] = useState({
         x: 0,
         y: 600,
@@ -23,73 +24,61 @@ const Game = ({ socket }) => {
         isFlashing: false,
         isWalking: false,
     });
+
     const [rockets, setRockets] = useState([]);
-    const [balls, setBalls] = useState([]);
+    const [balls, setBalls] = useState([
+        { x: 850, y: 650 },
+        { x: 400, y: 450 },
+        { x: 400, y: 250 },
+        { x: 800, y: 250 },
+        { x: 600, y: 250 },
+    ]);
     const [timeLeft, setTimeLeft] = useState(60);
     const [isGameOver, setIsGameOver] = useState(false);
     const [gameStarted, setGameStarted] = useState(false);
-    const [platforms, setPlatforms] = useState([]);
-    const [ladders, setLadders] = useState([]);
-    const [portal, setPortal] = useState(null);
+    const [role, setRole] = useState(null);
 
-    const startGame = () => {
-        setGameStarted(true);
-        socket.emit('startGame');
-        console.log('Game started');
-    };
+    const [platforms] = useState([
+        { x: 0, y: 700, width: 300, height: 20 },
+        { x: 400, y: 700, width: 300, height: 20 },
+        { x: 800, y: 700, width: 300, height: 20 },
+        { x: 0, y: 500, width: 100, height: 20 },
+        { x: 150, y: 500, width: 70, height: 20 },
+        { x: 300, y: 500, width: 200, height: 20 },
+        { x: 400, y: 500, width: 100, height: 20 },
+        { x: 600, y: 500, width: 100, height: 20 },
+        { x: 800, y: 500, width: 100, height: 20 },
+        { x: 1000, y: 500, width: 100, height: 20 },
+        { x: 0, y: 300, width: 100, height: 20 },
+        { x: 170, y: 300, width: 100, height: 20 },
+        { x: 350, y: 300, width: 130, height: 20 },
+        { x: 400, y: 300, width: 50, height: 20 },
+        { x: 600, y: 300, width: 100, height: 20 },
+        { x: 800, y: 300, width: 50, height: 20 },
+        { x: 900, y: 280, width: 50, height: 20 },
+        { x: 1000, y: 250, width: 100, height: 20 },
+    ]);
 
-    useEffect(() => {
-        socket.emit('requestInitialGameState');
+    const [ladders] = useState([
+        { x: 1000, y: 500, height: 200 },
+        { x: 0, y: 300, height: 200 },
+    ]);
 
-        socket.on('initialGameState', (gameState) => {
-            setPlatforms(gameState.platforms);
-            setLadders(gameState.ladders);
-            setBalls(gameState.balls);
-            setPortal(gameState.portal);
-            setTimeLeft(gameState.timeLeft || 60);
-            setIsGameOver(gameState.isGameOver);
-        });
+    const [portal] = useState({ x: 1110, y: 200, width: 10, height: 60 });
 
-        socket.on('playerPosition', (newPlayerState) => {
-            setPlayer(newPlayerState);
-        });
-
-        socket.on('spawnRockets', (newRockets) => {
-            setRockets((prev) => [...prev, ...newRockets]);
-        });
-
-        socket.on('ballBounce', (updatedBall) => {
-            setBalls((prev) => prev.map((ball) =>
-                ball.x === updatedBall.x ? { ...ball, y: updatedBall.y, velY: updatedBall.velY } : ball
-            ));
-        });
-
-        socket.on('updateTimer', (newTime) => {
-            setTimeLeft(newTime);
-        });
-
-        socket.on('gameOver', (gameOverState) => {
-            setIsGameOver(gameOverState);
-        });
-
-        return () => {
-            socket.off('initialGameState');
-            socket.off('playerPosition');
-            socket.off('spawnRockets');
-            socket.off('ballBounce');
-            socket.off('updateTimer');
-            socket.off('gameOver');
-        };
-    }, [socket]);
+    const gameRef = useRef(null);
 
     const handleKeyDown = useCallback((e) => {
         e.preventDefault();
         setPlayer((prev) => {
-            if (!prev) return prev;
+            if (!prev || prev.isImmune) return prev;
 
             let isWalking = false;
 
             switch (e.key) {
+                case 'ArrowUp':
+                case 'ArrowDown':
+                    return prev;
                 case 'ArrowLeft':
                     isWalking = true;
                     const newPosLeft = { ...prev, x: prev.x - 10, direction: -1, isWalking };
@@ -102,11 +91,11 @@ const Game = ({ socket }) => {
                     return newPosRight;
                 case ' ':
                     if (!prev.isJumping) {
-                        const jumpPos = { ...prev, velY: -JUMP_STRENGTH, isJumping: true };
+                        const jumpPos = { ...prev, velY: -JUMP_STRENGTH, isJumping: true, isWalking };
                         socket.emit('playerPosition', jumpPos);
                         return jumpPos;
                     }
-                    return prev;
+                    break;
                 case 'g':
                     if (prev.onLadder) {
                         let targetY;
@@ -126,12 +115,13 @@ const Game = ({ socket }) => {
                             return ladderPos;
                         }
                     }
-                    return prev;
+                    break;
                 default:
                     return prev;
             }
+            return { ...prev, isWalking };
         });
-    }, [socket, ladders]);
+    }, [ladders, socket]);
 
     const handleKeyUp = useCallback((e) => {
         e.preventDefault();
@@ -156,63 +146,99 @@ const Game = ({ socket }) => {
     }, [handleKeyDown, handleKeyUp]);
 
     useEffect(() => {
-        const handleShootRocket = () => {
-            const newRockets = [
+        socket.emit('joinGame', gameType);
+
+        socket.on('role', (assignedRole) => {
+            setRole(assignedRole);
+            if (assignedRole === 'host') {
+                socket.emit('setInitialGameState', {
+                    player,
+                    rockets,
+                    balls,
+                    timeLeft,
+                    isGameOver
+                });
+            }
+        });
+
+        socket.on('initialGameState', (initialState) => {
+            setPlayer(initialState.player || {});
+            setRockets(initialState.rockets || []);
+            setBalls(initialState.balls || []);
+            setTimeLeft(initialState.timeLeft || 60);
+            setIsGameOver(initialState.isGameOver || false);
+        });
+
+        // Update timer and ball positions based on server-sent time
+        socket.on('updateTimer', (newTime) => {
+            setTimeLeft(newTime);
+
+            // Update ball positions based on the time left being even or odd
+            setBalls((prevBalls) =>
+                prevBalls.map((ball) => {
+                    const shouldMoveUp = newTime % 2 === 0;
+                    return {
+                        ...ball,
+                        y: shouldMoveUp
+                            ? ball.y + BALL_MOVE_AMOUNT
+                            : ball.y - BALL_MOVE_AMOUNT,
+                    };
+                })
+            );
+        });
+
+        socket.on('playerPosition', (newPlayerState) => {
+            setPlayer(newPlayerState);
+        });
+
+    }, [role, gameType, socket]);
+
+    useEffect(() => {
+        if (!gameStarted) return;
+
+        const handleUpdateRockets = () => {
+            setRockets((prev) => [
+                ...prev,
                 { x: GAME_WIDTH, y: 230, direction: 'left' },
                 { x: 0, y: 260, direction: 'right' },
                 { x: 0, y: 390, direction: 'right' },
                 { x: GAME_WIDTH, y: 450, direction: 'left' },
                 { x: GAME_WIDTH, y: 680, direction: 'left' },
                 { x: 0, y: 600, direction: 'right' }
-            ];
-            setRockets(prev => [...prev, ...newRockets]);
+            ]);
         };
 
-        socket.on('shoot', handleShootRocket);
+        socket.on('updateRockets', handleUpdateRockets);
 
         return () => {
-            socket.off('shoot', handleShootRocket);
+            socket.off('updateRockets', handleUpdateRockets);
         };
-    }, [socket]);
+    }, [gameStarted, socket]);
 
     useEffect(() => {
-        if (!gameStarted) return;
-        let animationFrameId;
+        const gameInterval = setInterval(() => {
+            // Update rocket positions
+            setRockets((prevRockets) =>
+                prevRockets.map((rocket) => ({
+                    ...rocket,
+                    x: rocket.direction === 'left' ? rocket.x - 2.3 : rocket.x + 2.3,
+                })).filter(rocket => rocket.x > 0 && rocket.x < GAME_WIDTH)
+            );
 
-        const handleKnockback = (knockedBack, newX, direction) => {
-            if (knockedBack && !player.isImmune) {
-                const knockbackDistance = direction === 'left' ? -KNOCKBACK : KNOCKBACK;
-                setPlayer(prev => ({
-                    ...prev,
-                    x: prev.x + knockbackDistance,
-                    isImmune: true,
-                    isFlashing: true,
-                    velY: 0,
-                }));
-
-                setTimeout(() => {
-                    setPlayer(prev => ({
-                        ...prev,
-                        isImmune: false,
-                        isFlashing: false,
-                    }));
-                }, 1000); // 1 second immunity
-            }
-        };
-
-        const gameInterval = () => {
+            // Update player, platform, and other game logic here as needed...
             setPlayer((prev) => {
                 if (!prev) return prev;
 
-                let newX = prev.x;
                 let newY = prev.y + prev.velY;
                 let newVelY = prev.velY + GRAVITY;
                 let isJumping = prev.isJumping;
 
+                let newX = prev.x;
                 if (prev.isJumping) {
-                    newX = prev.x + 0.3 * prev.direction;
+                    newX = prev.x + 2 * prev.direction;
                 }
 
+                // Collision with platforms
                 let isOnPlatform = false;
                 platforms.forEach((platform) => {
                     if (
@@ -230,10 +256,9 @@ const Game = ({ socket }) => {
 
                 if (newY + PLAYER_HEIGHT > GAME_HEIGHT) {
                     setIsGameOver(true);
-                    socket.emit('gameOver', true);
-                    return prev;
                 }
 
+                // Collision with ladders
                 let onLadder = false;
                 ladders.forEach((ladder) => {
                     if (
@@ -246,8 +271,28 @@ const Game = ({ socket }) => {
                     }
                 });
 
+                const updatedPlayer = { 
+                    ...prev, 
+                    x: newX, 
+                    y: newY, 
+                    velY: newVelY, 
+                    isJumping, 
+                    onLadder, 
+                    isOnPlatform, 
+                    isWalking: false 
+                };
+
+                socket.emit('playerPosition', updatedPlayer);
+
+                return updatedPlayer;
+            });
+
+            setPlayer((prev) => {
+                if (!prev || prev.isImmune) return prev;
+
+                let newX = prev.x;
+                let newY = prev.y;
                 let knockedBack = false;
-                let knockbackDirection = 'right'; // Default direction
 
                 rockets.forEach((rocket) => {
                     if (
@@ -256,8 +301,8 @@ const Game = ({ socket }) => {
                         prev.y < rocket.y + 20 &&
                         prev.y + PLAYER_HEIGHT > rocket.y
                     ) {
+                        newX += rocket.direction === 'left' ? -KNOCKBACK : KNOCKBACK;
                         knockedBack = true;
-                        knockbackDirection = rocket.direction; // Set direction based on rocket
                     }
                 });
 
@@ -268,48 +313,56 @@ const Game = ({ socket }) => {
                         prev.y < ball.y + BALL_SIZE &&
                         prev.y + PLAYER_HEIGHT > ball.y
                     ) {
+                        newX += ball.velY > 0 ? KNOCKBACK : -KNOCKBACK;
                         knockedBack = true;
-                        knockbackDirection = ball.velY > 0 ? 'left' : 'right'; // Determine knockback direction
                     }
                 });
 
-                handleKnockback(knockedBack, newX, knockbackDirection);
+                if (knockedBack) {
+                    setPlayer(prev => ({
+                        ...prev,
+                        isImmune: true,
+                        isFlashing: true,
+                        velY: 0,
+                    }));
 
-                if (
-                    newX < portal.x + portal.width &&
-                    newX + PLAYER_WIDTH > portal.x &&
-                    newY < portal.y + portal.height &&
-                    newY + PLAYER_HEIGHT > portal.y
-                ) {
-                    setIsGameOver(true);
-                    socket.emit('gameOver', true);
-                    alert('You Win!');
+                    setTimeout(() => {
+                        setPlayer(prev => ({
+                            ...prev,
+                            isImmune: false,
+                            isFlashing: false,
+                        }));
+                    }, 1000);
                 }
 
-                return {
-                    ...prev,
-                    x: newX,
-                    y: newY,
-                    velY: newVelY,
-                    isJumping,
-                    onLadder,
-                    isOnPlatform,
-                    isWalking: false,
-                };
+                return { ...prev, x: newX, y: newY };
             });
 
-            setRockets((prev) => prev.map((rocket) => ({
-                ...rocket,
-                x: rocket.x + (rocket.direction === 'left' ? -0.3 : 0.3),
-            })).filter(rocket => rocket.x > 0 && rocket.x < GAME_WIDTH));
+            setPlayer((prev) => {
+                if (!prev) return prev;
+                if (
+                    prev.x < portal.x + portal.width &&
+                    prev.x + PLAYER_WIDTH > portal.x &&
+                    prev.y < portal.y + portal.height &&
+                    prev.y + PLAYER_HEIGHT > portal.y
+                ) {
+                    setIsGameOver(true);
+                    alert('You Win!');
+                }
+                return prev;
+            });
 
-            animationFrameId = requestAnimationFrame(gameInterval);
-        };
+        }, 1000 / 144);
 
-        gameInterval();
+        return () => clearInterval(gameInterval);
+    }, [gameStarted, rockets, platforms, portal, ladders, balls, player, socket]);
 
-        return () => cancelAnimationFrame(animationFrameId);
-    }, [gameStarted, platforms, ladders, rockets, balls, portal, socket, player.isImmune]);
+    useEffect(() => {
+        if (timeLeft === 0) {
+            setIsGameOver(true);
+            alert('Game Over!');
+        }
+    }, [timeLeft]);
 
     const gameContainerStyle = {
         transform: `scale(${ZOOM_LEVEL})`,
@@ -325,14 +378,11 @@ const Game = ({ socket }) => {
         <div className="modal-overlay">
             <div className="modal-content">
                 <button className="close-button" onClick={() => setGameStarted(false)}>X</button>
-                <div className="game" style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}>
-                    <div className="timer">Host Time Left: {timeLeft}</div>
+                <div className="game" ref={gameRef} style={{ width: GAME_WIDTH, height: GAME_HEIGHT }}>
+                    <div className="timer">Time Left: {timeLeft}</div>
                     {!gameStarted && (
-                        <button
-                            onClick={() => {
-                                setGameStarted(true);
-                                startGame();
-                            }}
+                        <button 
+                            onClick={() => setGameStarted(true)}
                             style={{
                                 display: "flex",
                                 justifyContent: "center",
@@ -348,7 +398,6 @@ const Game = ({ socket }) => {
                             Start Game
                         </button>
                     )}
-
                     {gameStarted && (
                         <div className="viewport" style={gameContainerStyle}>
                             <div
