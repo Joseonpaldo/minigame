@@ -1,23 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import Wire from './Wire';
 
-
-const Bomb = () => {
+const Bomb = ({ socket }) => {
     const [status, setStatus] = useState('active');
     const [defuseWire, setDefuseWire] = useState('');
 
     useEffect(() => {
-        // Randomly choose a wire to be the defuse wire
         const randomWire = Math.random() < 0.5 ? 'blue' : 'red';
         setDefuseWire(randomWire);
-    }, []);
+        socket.emit('setDefuseWire', randomWire); // Send the defuse wire to the server
+    }, [socket]);
 
     const handleCutWire = (color) => {
-        if (color === defuseWire) {
-            setStatus('defused');
-        } else {
-            setStatus('exploded');
-        }
+        const newStatus = color === defuseWire ? 'defused' : 'exploded';
+        setStatus(newStatus);
+        socket.emit('bombStatus', newStatus); // Send the bomb status to the server
     };
 
     return (

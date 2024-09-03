@@ -8,18 +8,20 @@ import RockPaperScissorsViewer from './components/RPSviewer';
 import io from 'socket.io-client';
 import Bomb from './components/Bomb.js';
 import CardUpDown from './components/CardUpDown.js';
+import BombViewer from './components/BombViewer.js';
 
 const socket = io('http://192.168.0.52:4000');
 
 const App = () => {
   const [role, setRole] = useState(null);
   const [gameType, setGameType] = useState(null);
+  const [roomNumber, setRoomNumber] = useState('');
 
   useEffect(() => {
-    if (gameType) {
-      socket.emit('joinGame', gameType);
+    if (gameType && roomNumber) {
+      socket.emit('joinGame', { gameType, roomNumber });
     }
-  }, [gameType]);
+  }, [gameType, roomNumber]);
 
   useEffect(() => {
     socket.on('role', (assignedRole) => {
@@ -33,7 +35,11 @@ const App = () => {
   }, []);
 
   const handleGameSelection = (selectedGameType) => {
-    setGameType(selectedGameType);
+    const room = prompt('Enter Room Number:');
+    if (room) {
+      setRoomNumber(room);
+      setGameType(selectedGameType);
+    }
   };
 
   if (!gameType) {
@@ -61,6 +67,7 @@ const App = () => {
       {role === 'host' && gameType === 'RPS' && <RockPaperScissors socket={socket} />}
       {role === 'viewer' && gameType === 'RPS' && <RockPaperScissorsViewer socket={socket} />}
       {role === 'host' && gameType === 'bomb' && <Bomb socket={socket} />}
+      {role === 'viewer' && gameType === 'bomb' && <BombViewer socket={socket} />}
       {gameType === 'Card Up Down' && <CardUpDown />}
     </div>
   );

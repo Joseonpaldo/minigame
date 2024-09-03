@@ -19,7 +19,7 @@ const io = socketIo(server, {
 });
 
 const MAX_PLAYERS_PER_SESSION = 4;
-let gameSessions = {};  // Object to store game sessions by type
+let gameSessions = {};  // Object to store game sessions by gameType and roomNumber
 
 io.on('connection', (socket) => {
   console.log('New client connected');
@@ -53,30 +53,33 @@ io.on('connection', (socket) => {
     }, 5000);
   };
 
-  socket.on('joinGame', (gameType) => {
+  socket.on('joinGame', ({ gameType, roomNumber }) => {
     if (roleAssigned) return;
 
-    if (!gameSessions[gameType]) {
-      gameSessions[gameType] = [];
+    const sessionKey = `${gameType}-${roomNumber}`;
+
+    if (!gameSessions[sessionKey]) {
+      gameSessions[sessionKey] = [];
     }
 
-    let session = gameSessions[gameType].find(s => s.players.length < MAX_PLAYERS_PER_SESSION);
+    let session = gameSessions[sessionKey].find(s => s.players.length < MAX_PLAYERS_PER_SESSION);
 
     if (!session) {
       session = {
-        id: `session-${Date.now()}`,
+        id: sessionKey,
         gameType: gameType,
+        roomNumber: roomNumber,
         players: [],
         host: null,
         gameState: null,
       };
-      gameSessions[gameType].push(session);
+      gameSessions[sessionKey].push(session);
     }
 
     currentSession = session;
     currentSession.players.push(socket);
     socket.join(currentSession.id);
-    console.log(`Client joined session ${currentSession.id} for game type ${gameType}`);
+    console.log(`Client joined session ${currentSession.id} for game type ${gameType} in room ${roomNumber}`);
 
     if (currentSession.players.length === 1) {
       // First player becomes the host
@@ -103,18 +106,67 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('Client disconnected');
     if (currentSession) {
-      if (socket === currentSession.host) {
-        console.log(`Session ${currentSession.id} ended because the host disconnected`);
-        clearInterval(timerInterval);
-        clearInterval(rocketInterval);
-        io.to(currentSession.id).emit('gameOver');
-        gameSessions[currentSession.gameType] = gameSessions[currentSession.gameType].filter(session => session.id !== currentSession.id);
-        io.to(currentSession.id).emit('sessionClosed');
-        currentSession.players.forEach(player => player.disconnect(true));
-      } else {
+        // Remove the disconnected socket from the session's player list
         currentSession.players = currentSession.players.filter(player => player !== socket);
-        io.to(currentSession.id).emit('playerCount', currentSession.players.length);
-      }
+
+        if (socket === currentSession.host) {
+            console.log(`Host disconnected from session ${currentSession.id}`);
+
+            // Clear intervals if the host disconnects
+            clearInterval(timerInterval);
+            clearInterval(rocketInterval);
+
+            // Notify all remaining players that the game is over
+            io.to(currentSession.id).emit('gameOver');
+            io.to(currentSession.id).emit('sessionClosed');
+
+            // Disconnect all players from the session
+            currentSession.players.forEach(player => player.disconnect(true));
+
+            // Remove the session from the gameSessions object
+            if (gameSessions[currentSession.gameType]) {
+                gameSessions[currentSession.gameType] = gameSessions[currentSession.gameType].filter(session => session.id !== currentSession.id);
+                
+                if (gameSessions[currentSession.gameType].length === 0) {
+                    delete gameSessions[currentSession.gameType];
+                }
+            }
+
+        } else {
+            // If a non-host player disconnects
+            io.to(currentSession.id).emit('playerCount', currentSession.players.length);
+
+            // If no players are left in the session, clean it up
+            if (currentSession.players.length === 0) {
+                console.log(`All players disconnected from session ${currentSession.id}`);
+
+                // Clean up session data
+                clearInterval(timerInterval);
+                clearInterval(rocketInterval);
+
+                if (gameSessions[currentSession.gameType]) {
+                    gameSessions[currentSession.gameType] = gameSessions[currentSession.gameType].filter(session => session.id !== currentSession.id);
+                    
+                    if (gameSessions[currentSession.gameType].length === 0) {
+                        delete gameSessions[currentSession.gameType];
+                    }
+                }
+            }
+        }
+    }
+});
+
+  // Bomb Game events
+  socket.on('setDefuseWire', (wire) => {
+    if (currentSession && socket === currentSession.host && currentSession.gameState) {
+      currentSession.gameState.defuseWire = wire;
+      io.to(currentSession.id).emit('defuseWire', wire);
+    }
+  });
+
+  socket.on('bombStatus', (status) => {
+    if (currentSession && currentSession.gameType === 'bomb') {
+      io.to(currentSession.id).emit('bombStatusUpdate', status);
     }
   });
 
@@ -250,6 +302,10 @@ function setupNewGameState(session, gameType) {
       playerScore: 0,
       computerScore: 0,
       round: 1,
+    };
+  } else if (gameType === 'bomb') {
+    session.gameState = {
+      defuseWire: null,
     };
   }
 }

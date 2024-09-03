@@ -101,7 +101,7 @@ const AlienShooter = ({ socket }) => {
             id: Date.now(),
             left: Math.random() * 90,
             top: 0,
-            speed: isStrongAlien ? 0.05 : 0.1, // Strong alien is slower
+            speed: isStrongAlien ? 0.01 : 0.05, // Strong alien is slower
             type: isStrongAlien ? 'strong' : 'normal',
             hits: isStrongAlien ? 3 : 1, // Strong alien takes 3 hits, normal takes 1 hit
             flash: false, // Flash effect
@@ -150,7 +150,7 @@ const AlienShooter = ({ socket }) => {
         }))
       );
       socket.emit('updateBullets', bullets);
-    }, 2);
+    }, 3.5);
 
     return () => clearInterval(interval);
   }, [gameOver, bullets, socket]);
@@ -161,7 +161,7 @@ const AlienShooter = ({ socket }) => {
       if (!gameOver) {
         if (event.key === 'ArrowLeft' || event.key === 'a') {
           setSpaceshipPosition((prev) => {
-            const newPos = Math.max(prev - 2, 0);
+            const newPos = Math.max(prev - 3, 0);
             socket.emit('spaceshipPosition', newPos); // Emit spaceship position update
             console.log('Emitting spaceship position:', newPos); // Debug log
             return newPos;
@@ -169,7 +169,7 @@ const AlienShooter = ({ socket }) => {
         }
         if (event.key === 'ArrowRight' || event.key === 'd') {
           setSpaceshipPosition((prev) => {
-            const newPos = Math.min(prev + 2, 90);
+            const newPos = Math.min(prev + 3, 90);
             socket.emit('spaceshipPosition', newPos); // Emit spaceship position update
             console.log('Emitting spaceship position:', newPos); // Debug log
             return newPos;

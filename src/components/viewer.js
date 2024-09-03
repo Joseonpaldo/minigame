@@ -122,7 +122,7 @@ const Viewer = ({ socket }) => {
             setRockets((prevRockets) =>
                 prevRockets.map((rocket) => ({
                     ...rocket,
-                    x: rocket.direction === 'left' ? rocket.x - 2.3 : rocket.x + 2.3,
+                    x: rocket.direction === 'left' ? rocket.x - 3 : rocket.x + 3,
                 })).filter(rocket => rocket.x > 0 && rocket.x < GAME_WIDTH)
             );
 
