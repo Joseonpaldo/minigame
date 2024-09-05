@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import './css/RockPaperScissorsViewer.css'; // Add custom styles here
 
 const RockPaperScissorsViewer = ({ socket }) => {
   const [playerChoice, setPlayerChoice] = useState(null);
@@ -51,9 +52,9 @@ const RockPaperScissorsViewer = ({ socket }) => {
       case '바위':
         return '/rock (1).png';
       case '보':
-        return '/paper (2).png';
+        return '/paper (1).png';
       case '가위':
-        return '/scissor (3).png';
+        return '/scissor (1).png';
       default:
         return '';
     }
@@ -62,8 +63,10 @@ const RockPaperScissorsViewer = ({ socket }) => {
   return (
     <div className="App">
       <h2>Rock Paper Scissors - Viewer - Round {round}</h2>
-      <div>Player Score: {playerScore} | Computer Score: {computerScore}</div>
-      <div>
+      <div className="scoreboard">
+        Player Score: {playerScore} | Computer Score: {computerScore}
+      </div>
+      <div className="choices">
         <div>
           <p>Player's choice:</p>
           <img src={getImage(playerChoice)} alt={playerChoice} />

@@ -1,0 +1,63 @@
+/* Timer Box */
+.timer-box {
+  width: 100%; /* Full width of container */
+  max-width: 200px; /* Max width for the timer */
+  height: 20px;
+  position: relative;
+  border: 1px solid #000;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+/* Timer Fill (Shrinking Effect) */
+.timer-fill {
+  background-color: #4caf50;
+  height: 100%;
+  transition: width 1s linear; /* Smooth shrinking effect */
+  width: 100%; /* Starts at full width */
+  transform-origin: center; /* Shrinks symmetrically from the center */
+}
+
+/* Choices Container */
+.choices-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+/* Choice Buttons */
+.choice {
+  margin: 0 10px; /* Spacing between choices */
+}
+
+/* Hands Display (Your and Computer's choices) */
+.hands {
+  display: flex;
+  justify-content: center;
+}
+
+.hand {
+  margin: 20px;
+}
+
+/* Result Text */
+.result {
+  text-align: center;
+}
+
+/* Jump Animation */
+.jump {
+  animation: jump 0.5s ease;
+}
+
+@keyframes jump {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}

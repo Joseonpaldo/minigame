@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import './Game.css';
+import './css/Game.css';
 
 const PLAYER_WIDTH = 40;
 const PLAYER_HEIGHT = 40;

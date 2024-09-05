@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import './Game.css';
+import './css/Game.css';
 
 const GRAVITY = 0.2;
 const JUMP_STRENGTH = 6;

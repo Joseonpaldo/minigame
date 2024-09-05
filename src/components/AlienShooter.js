@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import './AlienShooter.css';
+import './css/AlienShooter.css';
 
 const AlienShooter = ({ socket }) => {
   const [aliens, setAliens] = useState([]);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import './css/RockPaperScissors.css'; // Add custom styles here
 
 const RockPaperScissors = ({ socket }) => {
   const [playerChoice, setPlayerChoice] = useState(null);
@@ -9,8 +10,28 @@ const RockPaperScissors = ({ socket }) => {
   const [playerScore, setPlayerScore] = useState(0);
   const [computerScore, setComputerScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(3); // Timer starts at 3 seconds
 
   const choices = ['바위', '보', '가위'];
+
+  // Timer logic for each round
+  useEffect(() => {
+    if (gameOver || timeLeft === 0) return;
+
+    const timer = setInterval(() => {
+      setTimeLeft((prevTimeLeft) => {
+        if (prevTimeLeft > 0) {
+          return prevTimeLeft - 1;
+        } else {
+          playGame(null); // Auto-play if the player doesn't choose
+          clearInterval(timer);
+          return 0;
+        }
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft, gameOver]); // Adding timeLeft ensures the timer gets reset
 
   const playGame = (choice) => {
     if (gameOver) return;
@@ -41,10 +62,28 @@ const RockPaperScissors = ({ socket }) => {
     setResult(outcome);
     socket.emit('rpsResult', outcome);
 
+    // Check if game is over (3 rounds)
     if (round === 3) {
       setGameOver(true);
+
+      // Determine final result
+      let finalOutcome;
+      if (playerScore > computerScore) {
+        finalOutcome = 'You Win the Game!';
+      } else if (playerScore < computerScore) {
+        finalOutcome = 'You Lose the Game!';
+      } else {
+        finalOutcome = 'The Game is a Draw!';
+      }
+
+      // Send final result to the server
+      socket.emit('rpsFinalResult', finalOutcome);
+
+      // Trigger alert with final result
+      alert(finalOutcome);
     } else {
       setRound(round + 1);
+      setTimeLeft(3); // Reset the timer for the next round
     }
 
     setAnimateResult(true);
@@ -82,11 +121,11 @@ const RockPaperScissors = ({ socket }) => {
   const getImage = (choice) => {
     switch (choice) {
       case '바위':
-        return '/rock (1).png';
+        return '/rock.png';
       case '보':
-        return '/paper (1).png';
+        return '/paper.png';
       case '가위':
-        return '/scissor (1).png';
+        return '/scissor.png';
       default:
         return '';
     }
@@ -96,7 +135,15 @@ const RockPaperScissors = ({ socket }) => {
     <div className="App">
       <h2>Rock Paper Scissors - Round {round}</h2>
       <div>Player Score: {playerScore} | Computer Score: {computerScore}</div>
-      <div>
+
+      {/* Timer Box Animation */}
+      <div className="timer-box">
+        <div
+          className="timer-fill"
+          style={{ width: `${(timeLeft / 3) * 100}%` }} // Shrinking towards center
+        />
+      </div>
+      <div className="choices-container">
         {choices.map((choice) => (
           <button
             key={choice}
@@ -107,6 +154,7 @@ const RockPaperScissors = ({ socket }) => {
           </button>
         ))}
       </div>
+
       {playerChoice && (
         <div>
           <div className="hands">
