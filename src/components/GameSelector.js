@@ -5,7 +5,7 @@ import CardUpDown from './CardUpDown';
 import Bomb from './Bomb';
 import AlienShooter from './AlienShooter';
 import Modal from './Modal';
-import './GameSelector.css'; // Import the new CSS file for styling
+import './css/GameSelector.css'; // Import the new CSS file for styling
 
 const data = [
   { option: 'Rock Paper Scissors', style: { backgroundColor: 'green', textColor: 'black' } },
