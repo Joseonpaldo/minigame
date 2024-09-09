@@ -43,7 +43,7 @@ function generateFoods() {
 }
 
 // 플레이어 추가 함수
-function addPlayer(io, socket, roomId, rooms) {
+function addPlayer(socket, roomId, rooms) {
     const room = rooms[roomId];
     const playerCount = Object.keys(room.players).length;
 
@@ -62,17 +62,17 @@ function addPlayer(io, socket, roomId, rooms) {
             score: 0
         };
     } else {
-        socket.emit('error', 'Maximum players reached.');
+        socket.to(roomId).emit('error', 'Maximum players reached.');
     }
 
     if (Object.keys(room.players).length === MAX_PLAYERS && !room.gameRunning) {
         room.gameRunning = true;
-        io.to(roomId).emit('startCountdown'); // 모든 플레이어가 들어오면 카운트다운 시작
+        socket.to(roomId).emit('startCountdown'); // 모든 플레이어가 들어오면 카운트다운 시작
     }
 }
 
 // 플레이어 제거 함수
-function removePlayer(io, playerId, roomId, rooms) {
+function removePlayer(socket, playerId, roomId, rooms) {
     const room = rooms[roomId];
     
     if (room) {
@@ -83,7 +83,7 @@ function removePlayer(io, playerId, roomId, rooms) {
             delete rooms[roomId];
         } else {
             // 플레이어가 방에 남아있는 경우, 게임 상태를 모든 클라이언트에 전송
-            broadcastGameState(io, roomId, rooms);
+            broadcastGameState(socket, roomId, rooms);
         }
     }
 }
@@ -189,25 +189,25 @@ function updateGameState(roomId, rooms) {
 }
 
 // 게임 상태를 클라이언트로 전송하는 함수
-function broadcastGameState(io, roomId, rooms) {
-    io.to(roomId).emit('gameState', {
+function broadcastGameState(socket, roomId, rooms) {
+    socket.to(roomId).emit('gameState', {
         players: rooms[roomId].players,
         foods: rooms[roomId].foods
     });
 }
 
 // 게임 루프 시작 함수
-function startGameLoop(io, roomId, rooms) {
+function startGameLoop(socket, roomId, rooms) {
     const room = rooms[roomId];
     room.foods = generateFoods(); // 방별 음식 생성
 
     const interval = setInterval(() => {
         updateGameState(roomId, rooms);
-        broadcastGameState(io, roomId, rooms);
+        broadcastGameState(socket, roomId, rooms);
     }, TICK_RATE);
 
     // 방에 플레이어가 없을 시 게임 종료 및 루프 중지
-    io.of('/').adapter.on('leave-room', (room, id) => {
+    socket.adapter.on('leave-room', (room, id) => {
         if (room === roomId && Object.keys(rooms[roomId].players).length === 0) {
             clearInterval(interval); // 게임 루프 중지
             delete rooms[roomId]; // 방 제거

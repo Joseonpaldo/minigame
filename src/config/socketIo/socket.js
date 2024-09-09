@@ -1,4 +1,4 @@
-import socketIo from 'socket.io';
+const socketIo = require('socket.io');
 const initPlatformerGame = require('./SocketForGame/PlatformerGameSocket');
 const initShooterGame = require('./SocketForGame/ShooterGameSocket');
 const initSnakeGame = require('./SocketForGame/SnakeGameSocket');
