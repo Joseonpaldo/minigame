@@ -1,4 +1,4 @@
-const gameLogic = require('@src/game/snake/GameLogic');
+const gameLogic = require('../../../game/snake/GameLogic');
 
 module.exports = (io, roomNum) => {
     const snakeNamespace = io.of(`/nws/snake/${roomNum}`);

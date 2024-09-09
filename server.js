@@ -1,7 +1,7 @@
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
-const { initSocket } = require('./src/config/socket');
+const { initSocket } = require('./src/config/socketIo/socket');
 
 const app = express();
 const server = http.createServer(app);
