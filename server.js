@@ -29,29 +29,9 @@ io.on('connection', (socket) => {
   let timerInterval;
   let rocketInterval;
 
-  const startPlatformerGame = () => {
-    if (timerInterval) clearInterval(timerInterval);
-    if (rocketInterval) clearInterval(rocketInterval);
+  
 
-    timerInterval = setInterval(() => {
-      if (currentSession && currentSession.gameState && currentSession.gameState.timeLeft <= 0) {
-        clearInterval(timerInterval);
-        clearInterval(rocketInterval);
-        io.to(currentSession.id).emit('gameOver');
-        return;
-      }
-      if (currentSession && currentSession.gameState) {
-        currentSession.gameState.timeLeft -= 1;
-        io.to(currentSession.id).emit('updateTimer', currentSession.gameState.timeLeft);
-        console.log(currentSession.gameState.timeLeft);
-      }
-    }, 1000);
 
-    rocketInterval = setInterval(() => {
-      io.to(currentSession.id).emit('updateRockets');
-      console.log('updateRockets');
-    }, 5000);
-  };
 
   socket.on('joinGame', ({ gameType, roomNumber }) => {
     if (roleAssigned) return;
@@ -155,7 +135,7 @@ io.on('connection', (socket) => {
         }
     }
 });
-/***********위쪽은 공통로직***************** */
+
   // Bomb Game events
   socket.on('setDefuseWire', (wire) => {
     if (currentSession && socket === currentSession.host && currentSession.gameState) {
@@ -169,8 +149,33 @@ io.on('connection', (socket) => {
       io.to(currentSession.id).emit('bombStatusUpdate', status);
     }
   });
-/***********플랫폼 로직***************** */
+
   // Platformer Game events
+
+  const startPlatformerGame = () => {
+    if (timerInterval) clearInterval(timerInterval);
+    if (rocketInterval) clearInterval(rocketInterval);
+
+    timerInterval = setInterval(() => {
+      if (currentSession && currentSession.gameState && currentSession.gameState.timeLeft <= 0) {
+        clearInterval(timerInterval);
+        clearInterval(rocketInterval);
+        io.to(currentSession.id).emit('gameOver');
+        return;
+      }
+      if (currentSession && currentSession.gameState) {
+        currentSession.gameState.timeLeft -= 1;
+        io.to(currentSession.id).emit('updateTimer', currentSession.gameState.timeLeft);
+        console.log(currentSession.gameState.timeLeft);
+      }
+    }, 1000);
+
+    rocketInterval = setInterval(() => {
+      io.to(currentSession.id).emit('updateRockets');
+      console.log('updateRockets');
+    }, 5000);
+  };
+
   socket.on('playerPosition', (newPlayerState) => {
     if (currentSession && socket === currentSession.host && currentSession.gameState) {
       currentSession.gameState.player = newPlayerState;
@@ -271,44 +276,77 @@ io.on('connection', (socket) => {
   });
 });
 
+function setupAlienShootingGame(session) {
+  session.gameState = {
+    spaceshipPosition: 50,
+    aliens: [],
+    bullets: [],
+    specialEntities: [],
+    timeLeft: 100,
+  };
+}
+
+function setupPlatformerGame(session) {
+  session.gameState = {
+    player: { x: 0, y: 600 },
+    rockets: [],
+    balls: [], // Initialize empty and assign based on timeLeft later
+    timeLeft: 60, // Set initial timeLeft
+    isGameOver: false,
+  };
+
+  // Assign balls based on timeLeft
+  session.gameState.balls = (session.gameState.timeLeft % 2 === 0) ? [
+    { x: 850, y: 650, initialY: 650, velY: -1.5 },
+    { x: 400, y: 450, initialY: 450, velY: -1.5 },
+    { x: 400, y: 250, initialY: 250, velY: -1.5 },
+    { x: 800, y: 250, initialY: 250, velY: -1 },
+    { x: 600, y: 250, initialY: 250, velY: -0.5 },
+  ] : [
+    { x: 850, y: 550, initialY: 650, velY: -1.5 },
+    { x: 400, y: 350, initialY: 450, velY: -1.5 },
+    { x: 400, y: 150, initialY: 250, velY: -1.5 },
+    { x: 800, y: 150, initialY: 250, velY: -1 },
+    { x: 600, y: 150, initialY: 250, velY: -0.5 },
+  ];
+}
+
+function setupRPSGame(session) {
+  session.gameState = {
+    playerChoice: null,
+    computerChoice: null,
+    result: null,
+    playerScore: 0,
+    computerScore: 0,
+    round: 1,
+  };
+}
+
+function setupBombGame(session) {
+  session.gameState = {
+    defuseWire: null,
+  };
+}
+
 function setupNewGameState(session, gameType) {
-  if (gameType === 'alienShooting') {
-    session.gameState = {
-      spaceshipPosition: 50,
-      aliens: [],
-      bullets: [],
-      specialEntities: [],
-      timeLeft: 100,
-    };
-  } else if (gameType === 'platformer') {
-    session.gameState = {
-      player: { x: 0, y: 600 },
-      rockets: [],
-      balls: [
-        { x: 850, y: 650, initialY: 650, velY: -1.5 },
-        { x: 400, y: 450, initialY: 450, velY: -1.5 },
-        { x: 400, y: 250, initialY: 250, velY: -1.5 },
-        { x: 800, y: 250, initialY: 250, velY: -1 },
-        { x: 600, y: 250, initialY: 250, velY: -0.5 },
-      ],
-      timeLeft: 60,
-      isGameOver: false,
-    };
-  } else if (gameType === 'RPS') {
-    session.gameState = {
-      playerChoice: null,
-      computerChoice: null,
-      result: null,
-      playerScore: 0,
-      computerScore: 0,
-      round: 1,
-    };
-  } else if (gameType === 'bomb') {
-    session.gameState = {
-      defuseWire: null,
-    };
+  switch (gameType) {
+    case 'alienShooting':
+      setupAlienShootingGame(session);
+      break;
+    case 'platformer':
+      setupPlatformerGame(session);
+      break;
+    case 'RPS':
+      setupRPSGame(session);
+      break;
+    case 'bomb':
+      setupBombGame(session);
+      break;
+    default:
+      console.log(`Unknown game type: ${gameType}`);
   }
 }
+
 
 app.use(express.static(path.join(__dirname, 'build')));
 
