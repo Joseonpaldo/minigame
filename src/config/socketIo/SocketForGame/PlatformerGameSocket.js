@@ -1,13 +1,15 @@
-module.exports = (io, roomNum) => {
-    const platformerNamespace = io.of(`/nws/platformer/${roomNum}`);
+module.exports = (io) => {
+    const shooterNamespace = io.of('/platformer');
 
-    platformerNamespace.on('connection', (socket) => {
+    shooterNamespace.on('connection', (socket) => {
         console.log('Conntections to platformer game');
 
         // Join Game Action
-        socket.on('joinRoom', ({ room_num }) => {
-            socket.join(room_num);
-            console.log(`User joined room: ${room_num} for shooter game`);
+        socket.on('joinRoom', ({ roomNum }) => {
+            socket.join(roomNum);
+            console.log(`User joined room: ${roomNum} for platfornmer game`);
+
+            socket.to(roomNum).emit('msg', `Player joined room: ${roomNum}`);
         });
 
         // Disconnect Action

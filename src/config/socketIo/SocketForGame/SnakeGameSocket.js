@@ -1,7 +1,7 @@
 const gameLogic = require('../../../game/snake/GameLogic');
 
-module.exports = (io, roomNum) => {
-    const snakeNamespace = io.of(`/nws/snake/${roomNum}`);
+module.exports = (io) => {
+    const snakeNamespace = io.of(`/nws/snake`);
     const rooms = {};
 
     snakeNamespace.on('connection', (socket) => {
