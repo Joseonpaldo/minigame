@@ -3,12 +3,13 @@ const gameLogic = require('../../../game/snake/GameLogic');
 module.exports = (io) => {
     const snakeNamespace = io.of(`/nws/snake`);
     const rooms = {};
+    const clientRooms = {};
 
     snakeNamespace.on('connection', (socket) => {
-        console.log('Conntections to snake game');
+        console.log('Connections to snake game');
 
         // Join Game Action
-        socket.on('joinRoom', ({ roomNum }) => {
+        socket.on('joinRoom', ({ roomNum, userName, userColor }) => {
             socket.join(roomNum);
             console.log(`User joined room: ${roomNum} for snake game`);
 
@@ -18,10 +19,10 @@ module.exports = (io) => {
                     gameRunning: false,
                     countdown: 10
                 };
-                gameLogic.startGameLoop(socket, roomNum, rooms); // 방별 게임 루프 시작
+                gameLogic.startGameLoop(socket, roomNum, rooms[roomNum]); // 방별 게임 루프 시작
             }
-
-            gameLogic.addPlayer(socket, roomNum, rooms); // 방별로 플레이어 추가
+            clientRooms[socket.id] = roomNum;
+            gameLogic.addPlayer(socket, roomNum, userName, userColor, rooms); // 방별로 플레이어 추가
         });
 
         socket.on('move', (direction) => {
@@ -41,9 +42,9 @@ module.exports = (io) => {
         });
     
         socket.on('disconnect', () => {
-            const roomId = [...socket.rooms][1]; // 방 ID 가져오기
-            console.log('A user disconnected:', socket.id);
-            gameLogic.removePlayer(socket.id, roomId, rooms, io); // 방에서 플레이어 제거 및 상태 업데이트
+            const roomId = clientRooms[socket.id];
+            console.log('A user disconnected:', rooms[roomId].players[socket.id].id);
+            gameLogic.removePlayer(socket, socket.id, roomId, rooms[roomId]); // 방에서 플레이어 제거 및 상태 업데이트
         });
     });
 }

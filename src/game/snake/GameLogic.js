@@ -3,7 +3,6 @@ const TICK_RATE = 100; // 밀리초 단위로 게임을 업데이트하는 주�
 const MAX_PLAYERS = 4; // 최대 플레이어 수 설정
 const FOOD_COUNT = 12; // 일반 사과의 개수
 const GOLDEN_FOOD_COUNT = 3; // 황금 사과의 개수
-const COLORS = ['white', 'black', 'blue', 'red']; // 사용할 색상들
 
 // 점수와 관련된 상수
 const APPLE_SCORE = 10; // 일반 사과 점수
@@ -43,20 +42,18 @@ function generateFoods() {
 }
 
 // 플레이어 추가 함수
-function addPlayer(socket, roomId, rooms) {
+function addPlayer(socket, roomId, userName, userColor, rooms) {
     const room = rooms[roomId];
     const playerCount = Object.keys(room.players).length;
 
     if (playerCount < MAX_PLAYERS) {
         const startPos = START_POSITIONS[playerCount];
-        const color = COLORS[playerCount];
-        const shortId = socket.id.substring(0, 6);
 
         room.players[socket.id] = {
-            id: shortId,
+            id: userName,
             snake: [startPos],
             direction: startPos.direction,
-            color: color,
+            color: userColor,
             alive: true,
             canMove: false,
             score: 0
@@ -72,9 +69,7 @@ function addPlayer(socket, roomId, rooms) {
 }
 
 // 플레이어 제거 함수
-function removePlayer(socket, playerId, roomId, rooms) {
-    const room = rooms[roomId];
-    
+function removePlayer(socket, playerId, roomId, room) {
     if (room) {
         delete room.players[playerId]; // 플레이어 제거
 
@@ -83,7 +78,7 @@ function removePlayer(socket, playerId, roomId, rooms) {
             delete rooms[roomId];
         } else {
             // 플레이어가 방에 남아있는 경우, 게임 상태를 모든 클라이언트에 전송
-            broadcastGameState(socket, roomId, rooms);
+            broadcastGameState(socket, roomId, room);
         }
     }
 }
@@ -100,8 +95,7 @@ function updatePlayerDirection(playerId, direction, roomId, rooms) {
 }
 
 // 게임 상태 업데이트 함수
-function updateGameState(roomId, rooms) {
-    const room = rooms[roomId];
+function updateGameState(room) {
     const { players } = room;
     let foods = room.foods;  // foods 변수를 let으로 변경
 
@@ -185,32 +179,37 @@ function updateGameState(roomId, rooms) {
         }
     }
 
-    rooms[roomId].foods = foods; // 방별 음식 상태 업데이트
+    room.foods = foods; // 방별 음식 상태 업데이트
 }
 
 // 게임 상태를 클라이언트로 전송하는 함수
-function broadcastGameState(socket, roomId, rooms) {
+function broadcastGameState(socket, roomId, room) {
     socket.to(roomId).emit('gameState', {
-        players: rooms[roomId].players,
-        foods: rooms[roomId].foods
+        players: room.players,
+        foods: room.foods
     });
 }
 
 // 게임 루프 시작 함수
-function startGameLoop(socket, roomId, rooms) {
-    const room = rooms[roomId];
+function startGameLoop(socket, roomId, room) {;
     room.foods = generateFoods(); // 방별 음식 생성
 
     const interval = setInterval(() => {
-        updateGameState(roomId, rooms);
-        broadcastGameState(socket, roomId, rooms);
+        updateGameState(room);
+        broadcastGameState(socket, roomId, room);
     }, TICK_RATE);
 
     // 방에 플레이어가 없을 시 게임 종료 및 루프 중지
-    socket.adapter.on('leave-room', (room, id) => {
-        if (room === roomId && Object.keys(rooms[roomId].players).length === 0) {
-            clearInterval(interval); // 게임 루프 중지
-            delete rooms[roomId]; // 방 제거
+    socket.adapter.on('leave-room', (rm, id) => {
+        if (rm === roomId) {
+            // 플레이어 제거
+            delete room.players[id];
+    
+            // 방에 남아 있는 플레이어가 없는 경우
+            if (Object.keys(room.players).length === 0) {
+                clearInterval(interval); // 게임 루프 중지
+                delete room; // 방 제거
+            }
         }
     });
 }
