@@ -19,7 +19,42 @@ const io = socketIo(server, {
 });
 
 const MAX_PLAYERS_PER_SESSION = 4;
+const GAME_WIDTH = 1200;
+const GAME_HEIGHT = 800;
+const BALL_SIZE = 50;
+const ROCKET_SPEED = 2.5;
+const BALL_VELOCITY = 2;
 let gameSessions = {};  // Object to store game sessions by gameType and roomNumber
+
+// Function to update ball positions
+const updateBalls = (balls) => {
+  return balls.map(ball => {
+    ball.y += ball.velY;
+
+    // Ball collision with top or bottom
+    if (ball.y <= 0 || ball.y >= GAME_HEIGHT - BALL_SIZE) {
+      ball.velY *= -1; // Reverse direction
+    }
+    return ball;
+  });
+};
+
+// Function to update rocket positions
+const updateRockets = (rockets) => {
+  return rockets.map(rocket => {
+    if (rocket.direction === 'left') {
+      rocket.x -= ROCKET_SPEED;
+    } else {
+      rocket.x += ROCKET_SPEED;
+    }
+
+    // Reset rocket position if it goes off the screen
+    if (rocket.x < 0 || rocket.x > GAME_WIDTH) {
+      rocket.x = rocket.direction === 'left' ? GAME_WIDTH : 0;
+    }
+    return rocket;
+  });
+};
 
 io.on('connection', (socket) => {
   console.log('New client connected');
@@ -43,14 +78,20 @@ io.on('connection', (socket) => {
       if (currentSession && currentSession.gameState) {
         currentSession.gameState.timeLeft -= 1;
         io.to(currentSession.id).emit('updateTimer', currentSession.gameState.timeLeft);
-        console.log(currentSession.gameState.timeLeft);
       }
     }, 1000);
 
+    // Emit rocket and ball updates every 50ms for smooth movement
     rocketInterval = setInterval(() => {
-      io.to(currentSession.id).emit('updateRockets');
-      console.log('updateRockets');
-    }, 5000);
+      if (currentSession && currentSession.gameState) {
+        currentSession.gameState.rockets = updateRockets(currentSession.gameState.rockets);
+        currentSession.gameState.balls = updateBalls(currentSession.gameState.balls);
+        io.to(currentSession.id).emit('updateGameObjects', {
+          rockets: currentSession.gameState.rockets,
+          balls: currentSession.gameState.balls
+        });
+      }
+    }, 50);
   };
 
   socket.on('joinGame', ({ gameType, roomNumber }) => {
@@ -106,55 +147,54 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('Client disconnected');
     if (currentSession) {
-        // Remove the disconnected socket from the session's player list
-        currentSession.players = currentSession.players.filter(player => player !== socket);
+      // Remove the disconnected socket from the session's player list
+      currentSession.players = currentSession.players.filter(player => player !== socket);
 
-        if (socket === currentSession.host) {
-            console.log(`Host disconnected from session ${currentSession.id}`);
+      if (socket === currentSession.host) {
+        console.log(`Host disconnected from session ${currentSession.id}`);
 
-            // Clear intervals if the host disconnects
-            clearInterval(timerInterval);
-            clearInterval(rocketInterval);
+        // Clear intervals if the host disconnects
+        clearInterval(timerInterval);
+        clearInterval(rocketInterval);
 
-            // Notify all remaining players that the game is over
-            io.to(currentSession.id).emit('gameOver');
-            io.to(currentSession.id).emit('sessionClosed');
+        // Notify all remaining players that the game is over
+        io.to(currentSession.id).emit('gameOver');
+        io.to(currentSession.id).emit('sessionClosed');
 
-            // Disconnect all players from the session
-            currentSession.players.forEach(player => player.disconnect(true));
+        // Disconnect all players from the session
+        currentSession.players.forEach(player => player.disconnect(true));
 
-            // Remove the session from the gameSessions object
-            if (gameSessions[currentSession.gameType]) {
-                gameSessions[currentSession.gameType] = gameSessions[currentSession.gameType].filter(session => session.id !== currentSession.id);
-                
-                if (gameSessions[currentSession.gameType].length === 0) {
-                    delete gameSessions[currentSession.gameType];
-                }
-            }
-
-        } else {
-            // If a non-host player disconnects
-            io.to(currentSession.id).emit('playerCount', currentSession.players.length);
-
-            // If no players are left in the session, clean it up
-            if (currentSession.players.length === 0) {
-                console.log(`All players disconnected from session ${currentSession.id}`);
-
-                // Clean up session data
-                clearInterval(timerInterval);
-                clearInterval(rocketInterval);
-
-                if (gameSessions[currentSession.gameType]) {
-                    gameSessions[currentSession.gameType] = gameSessions[currentSession.gameType].filter(session => session.id !== currentSession.id);
-                    
-                    if (gameSessions[currentSession.gameType].length === 0) {
-                        delete gameSessions[currentSession.gameType];
-                    }
-                }
-            }
+        // Remove the session from the gameSessions object
+        if (gameSessions[currentSession.gameType]) {
+          gameSessions[currentSession.gameType] = gameSessions[currentSession.gameType].filter(session => session.id !== currentSession.id);
+          
+          if (gameSessions[currentSession.gameType].length === 0) {
+            delete gameSessions[currentSession.gameType];
+          }
         }
+      } else {
+        // If a non-host player disconnects
+        io.to(currentSession.id).emit('playerCount', currentSession.players.length);
+
+        // If no players are left in the session, clean it up
+        if (currentSession.players.length === 0) {
+          console.log(`All players disconnected from session ${currentSession.id}`);
+
+          // Clean up session data
+          clearInterval(timerInterval);
+          clearInterval(rocketInterval);
+
+          if (gameSessions[currentSession.gameType]) {
+            gameSessions[currentSession.gameType] = gameSessions[currentSession.gameType].filter(session => session.id !== currentSession.id);
+            
+            if (gameSessions[currentSession.gameType].length === 0) {
+              delete gameSessions[currentSession.gameType];
+            }
+          }
+        }
+      }
     }
-});
+  });
 
   // Bomb Game events
   socket.on('setDefuseWire', (wire) => {
@@ -271,6 +311,7 @@ io.on('connection', (socket) => {
   });
 });
 
+// Set up the game state depending on the game type
 function setupNewGameState(session, gameType) {
   if (gameType === 'alienShooting') {
     session.gameState = {
@@ -283,13 +324,20 @@ function setupNewGameState(session, gameType) {
   } else if (gameType === 'platformer') {
     session.gameState = {
       player: { x: 0, y: 600 },
-      rockets: [],
+      rockets: [
+        { x: GAME_WIDTH, y: 230, direction: 'left' },
+        { x: 0, y: 260, direction: 'right' },
+        { x: 0, y: 390, direction: 'right' },
+        { x: GAME_WIDTH, y: 450, direction: 'left' },
+        { x: GAME_WIDTH, y: 680, direction: 'left' },
+        { x: 0, y: 600, direction: 'right' },
+      ],
       balls: [
-        { x: 850, y: 650, initialY: 650, velY: -1.5 },
-        { x: 400, y: 450, initialY: 450, velY: -1.5 },
-        { x: 400, y: 250, initialY: 250, velY: -1.5 },
-        { x: 800, y: 250, initialY: 250, velY: -1 },
-        { x: 600, y: 250, initialY: 250, velY: -0.5 },
+        { x: 850, y: 650, velY: -BALL_VELOCITY },
+        { x: 400, y: 450, velY: BALL_VELOCITY },
+        { x: 400, y: 250, velY: -BALL_VELOCITY },
+        { x: 800, y: 250, velY: BALL_VELOCITY },
+        { x: 600, y: 250, velY: -BALL_VELOCITY },
       ],
       timeLeft: 60,
       isGameOver: false,

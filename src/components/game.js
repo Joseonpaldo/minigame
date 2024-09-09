@@ -3,13 +3,10 @@ import './css/Game.css';
 
 const GRAVITY = 0.2;
 const JUMP_STRENGTH = 6;
-const KNOCKBACK = 50;
 const PLAYER_WIDTH = 40;
 const PLAYER_HEIGHT = 40;
 const GAME_WIDTH = 1200;
 const GAME_HEIGHT = 800;
-const BALL_SIZE = 50;
-const BALL_MOVE_AMOUNT = 100; // Updated to 100 pixels
 const ZOOM_LEVEL = 2;
 
 const Game = ({ socket, gameType }) => {
@@ -24,15 +21,7 @@ const Game = ({ socket, gameType }) => {
         isFlashing: false,
         isWalking: false,
     });
-
-    const [rockets, setRockets] = useState([]);
-    const [balls, setBalls] = useState([
-        { x: 850, y: 650 },
-        { x: 400, y: 450 },
-        { x: 400, y: 250 },
-        { x: 800, y: 250 },
-        { x: 600, y: 250 },
-    ]);
+    
     const [timeLeft, setTimeLeft] = useState(60);
     const [isGameOver, setIsGameOver] = useState(false);
     const [gameStarted, setGameStarted] = useState(false);
@@ -153,8 +142,6 @@ const Game = ({ socket, gameType }) => {
             if (assignedRole === 'host') {
                 socket.emit('setInitialGameState', {
                     player,
-                    rockets,
-                    balls,
                     timeLeft,
                     isGameOver
                 });
@@ -163,68 +150,19 @@ const Game = ({ socket, gameType }) => {
 
         socket.on('initialGameState', (initialState) => {
             setPlayer(initialState.player || {});
-            setRockets(initialState.rockets || []);
-            setBalls(initialState.balls || []);
             setTimeLeft(initialState.timeLeft || 60);
             setIsGameOver(initialState.isGameOver || false);
         });
 
-        // Update timer and ball positions based on server-sent time
+        // Update timer based on server-sent time
         socket.on('updateTimer', (newTime) => {
             setTimeLeft(newTime);
-
-            // Update ball positions based on the time left being even or odd
-            setBalls((prevBalls) =>
-                prevBalls.map((ball) => {
-                    const shouldMoveUp = newTime % 2 === 0;
-                    return {
-                        ...ball,
-                        y: shouldMoveUp
-                            ? ball.y + BALL_MOVE_AMOUNT
-                            : ball.y - BALL_MOVE_AMOUNT,
-                    };
-                })
-            );
         });
 
-        socket.on('playerPosition', (newPlayerState) => {
-            setPlayer(newPlayerState);
-        });
-
-    }, [role, gameType, socket]);
-
-    useEffect(() => {
-        if (!gameStarted) return;
-
-        const handleUpdateRockets = () => {
-            setRockets((prev) => [
-                ...prev,
-                { x: GAME_WIDTH, y: 230, direction: 'left' },
-                { x: 0, y: 260, direction: 'right' },
-                { x: 0, y: 390, direction: 'right' },
-                { x: GAME_WIDTH, y: 450, direction: 'left' },
-                { x: GAME_WIDTH, y: 680, direction: 'left' },
-                { x: 0, y: 600, direction: 'right' }
-            ]);
-        };
-
-        socket.on('updateRockets', handleUpdateRockets);
-
-        return () => {
-            socket.off('updateRockets', handleUpdateRockets);
-        };
-    }, [gameStarted, socket]);
+    }, [isGameOver,role, gameType, socket]);
 
     useEffect(() => {
         const gameInterval = setInterval(() => {
-            // Update rocket positions
-            setRockets((prevRockets) =>
-                prevRockets.map((rocket) => ({
-                    ...rocket,
-                    x: rocket.direction === 'left' ? rocket.x - 2.3 : rocket.x + 2.3,
-                })).filter(rocket => rocket.x > 0 && rocket.x < GAME_WIDTH)
-            );
-
             // Update player, platform, and other game logic here as needed...
             setPlayer((prev) => {
                 if (!prev) return prev;
@@ -288,57 +226,6 @@ const Game = ({ socket, gameType }) => {
             });
 
             setPlayer((prev) => {
-                if (!prev || prev.isImmune) return prev;
-
-                let newX = prev.x;
-                let newY = prev.y;
-                let knockedBack = false;
-
-                rockets.forEach((rocket) => {
-                    if (
-                        prev.x < rocket.x + 20 &&
-                        prev.x + PLAYER_WIDTH > rocket.x &&
-                        prev.y < rocket.y + 20 &&
-                        prev.y + PLAYER_HEIGHT > rocket.y
-                    ) {
-                        newX += rocket.direction === 'left' ? -KNOCKBACK : KNOCKBACK;
-                        knockedBack = true;
-                    }
-                });
-
-                balls.forEach((ball) => {
-                    if (
-                        prev.x < ball.x + BALL_SIZE &&
-                        prev.x + PLAYER_WIDTH > ball.x &&
-                        prev.y < ball.y + BALL_SIZE &&
-                        prev.y + PLAYER_HEIGHT > ball.y
-                    ) {
-                        newX += ball.velY > 0 ? KNOCKBACK : -KNOCKBACK;
-                        knockedBack = true;
-                    }
-                });
-
-                if (knockedBack) {
-                    setPlayer(prev => ({
-                        ...prev,
-                        isImmune: true,
-                        isFlashing: true,
-                        velY: 0,
-                    }));
-
-                    setTimeout(() => {
-                        setPlayer(prev => ({
-                            ...prev,
-                            isImmune: false,
-                            isFlashing: false,
-                        }));
-                    }, 1000);
-                }
-
-                return { ...prev, x: newX, y: newY };
-            });
-
-            setPlayer((prev) => {
                 if (!prev) return prev;
                 if (
                     prev.x < portal.x + portal.width &&
@@ -355,7 +242,7 @@ const Game = ({ socket, gameType }) => {
         }, 1000 / 144);
 
         return () => clearInterval(gameInterval);
-    }, [gameStarted, rockets, platforms, portal, ladders, balls, player, socket]);
+    }, [gameStarted, platforms, portal, ladders, player, socket]);
 
     useEffect(() => {
         if (timeLeft === 0) {
@@ -404,9 +291,6 @@ const Game = ({ socket, gameType }) => {
                                 className={`player ${player?.isFlashing ? 'flashing' : ''} ${player?.isWalking ? 'moving' : 'still'} ${player?.direction === -1 ? 'left' : 'right'}`}
                                 style={{ left: player?.x, top: player?.y }}
                             />
-                            {rockets.map((rocket, index) => (
-                                <div key={index} className="rocket" style={{ left: rocket.x, top: rocket.y }} />
-                            ))}
                             {platforms.map((platform, index) => (
                                 <div key={index} className="platform" style={{ left: platform.x, top: platform.y, width: platform.width, height: platform.height }} />
                             ))}
@@ -414,9 +298,6 @@ const Game = ({ socket, gameType }) => {
                                 <div key={index} className="ladder" style={{ left: ladder.x, top: ladder.y, height: ladder.height }} />
                             ))}
                             <div className="portal" style={{ left: portal.x, top: portal.y, width: portal.width, height: portal.height }} />
-                            {balls.map((ball, index) => (
-                                <div key={index} className="ball" style={{ left: ball.x, top: ball.y, width: BALL_SIZE, height: BALL_SIZE }} />
-                            ))}
                         </div>
                     )}
                 </div>
