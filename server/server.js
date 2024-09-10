@@ -114,6 +114,33 @@ const startBombGame = (sessionKey, socket) => {
     socket.join(currentSession.id);
 };
 
+// Rock Paper Scissors (RPS) game logic
+const startRPSGame = (sessionKey, socket) => {
+    // Initialize the session if it doesn't exist
+    if (!gameSessions[sessionKey]) {
+        gameSessions[sessionKey] = {
+            id: sessionKey,
+            players: [],
+            host: null,
+            gameState: { playerScore: 0, computerScore: 0, round: 1 },  // Initialize RPS game state
+        };
+    }
+
+    const currentSession = gameSessions[sessionKey];
+
+    // Host setup
+    if (!currentSession.host) {
+        currentSession.host = socket;
+        socket.emit('role', 'host');
+    } else {
+        socket.emit('role', 'viewer');
+    }
+
+    // Add the player to the room
+    currentSession.players.push(socket);
+    socket.join(currentSession.id);
+};
+
 // Clear the game and timer loops when the session ends
 const stopGameLoop = (sessionKey) => {
     if (gameLoops[sessionKey]) {
@@ -138,12 +165,11 @@ io.on('connection', (socket) => {
     let currentSession = null;
 
     // Handle player joining a game
-    socket.on('joinGame', ({ gameType, roomNumber }) => {
+    socket.on('joinGame', ({ gameType, roomNumber, role }) => {
         const sessionKey = `${gameType}-${roomNumber}`;
 
         // Platformer Game
         if (gameType === 'platformer') {
-            // Create session if it doesn't exist
             if (!gameSessions[sessionKey]) {
                 gameSessions[sessionKey] = {
                     id: sessionKey,
@@ -165,14 +191,12 @@ io.on('connection', (socket) => {
 
             console.log(`Player joined session: ${sessionKey}`);
 
-            // If a host already exists, assign the new player as a viewer
-            if (currentSession.host) {
-                socket.emit('role', 'viewer');
-                socket.emit('initialGameState', currentSession.gameState);  // Send the initial map and state
-            } else {
-                // Assign the first player as the host
+            if (role === 'host') {
                 currentSession.host = socket;
                 socket.emit('role', 'host');
+            } else {
+                socket.emit('role', 'viewer');
+                socket.emit('initialGameState', currentSession.gameState);  // Send the initial map and state
             }
 
             // Broadcast player count
@@ -191,6 +215,26 @@ io.on('connection', (socket) => {
         if (gameType === 'bomb') {
             startBombGame(sessionKey, socket);
             currentSession = gameSessions[sessionKey]; // Ensure the session is assigned here
+
+            if (role === 'host') {
+                socket.emit('role', 'host');
+            } else {
+                socket.emit('role', 'viewer');
+                socket.emit('bombStatusUpdate', currentSession.bombState.status);
+                socket.emit('defuseWire', currentSession.bombState.defuseWire);
+            }
+        }
+
+        // Rock Paper Scissors Game
+        if (gameType === 'rps') {
+            startRPSGame(sessionKey, socket);
+            currentSession = gameSessions[sessionKey]; // Ensure the session is assigned here
+
+            if (role === 'host') {
+                socket.emit('role', 'host');
+            } else {
+                socket.emit('role', 'viewer');
+            }
         }
     });
 
@@ -204,7 +248,7 @@ io.on('connection', (socket) => {
 
     // Handle bomb status updates
     socket.on('setDefuseWire', (wire) => {
-        console.log("Received setDefuseWire event with wire:", wire); // Log the wire received
+        console.log("Received setDefuseWire event with wire:", wire);
         if (currentSession && currentSession.bombState && socket === currentSession.host) {
             currentSession.bombState.defuseWire = wire;
             io.to(currentSession.id).emit('defuseWire', wire);
@@ -215,7 +259,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('bombStatus', (status) => {
-        console.log("Received bombStatus event with status:", status); // Log the status received
+        console.log("Received bombStatus event with status:", status);
         if (currentSession && currentSession.bombState) {
             currentSession.bombState.status = status;
             io.to(currentSession.id).emit('bombStatusUpdate', status);
@@ -225,19 +269,42 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Handle player disconnecting
+    // Handle Rock Paper Scissors game events
+    socket.on('rpsPlayerChoice', (choice) => {
+        if (currentSession && currentSession.gameState) {
+            io.to(currentSession.id).emit('rpsPlayerChoice', choice);
+        }
+    });
+
+    socket.on('rpsComputerChoice', (choice) => {
+        if (currentSession && currentSession.gameState) {
+            io.to(currentSession.id).emit('rpsComputerChoice', choice);
+        }
+    });
+
+    socket.on('rpsResult', (result) => {
+        if (currentSession && currentSession.gameState) {
+            currentSession.gameState.result = result;
+            io.to(currentSession.id).emit('rpsResult', result);
+        }
+    });
+
+    socket.on('rpsScore', ({ playerScore, computerScore }) => {
+        if (currentSession && currentSession.gameState) {
+            currentSession.gameState.playerScore = playerScore;
+            currentSession.gameState.computerScore = computerScore;
+            io.to(currentSession.id).emit('rpsScore', { playerScore, computerScore });
+        }
+    });
+
     socket.on('disconnect', () => {
         if (currentSession) {
             currentSession.players = currentSession.players.filter(player => player !== socket);
 
-            // Broadcast updated player count
             io.to(currentSession.id).emit('playerCount', currentSession.players.length);
 
-            console.log('Player disconnected from session:', currentSession.id);
-
-            // If no players are left in the session, clear the intervals and delete the session
             if (currentSession.players.length === 0) {
-                stopGameLoop(currentSession.id);  // Stop the game, timer, and rocket loops for the room
+                stopGameLoop(currentSession.id);
                 delete gameSessions[currentSession.id];
                 console.log(`Session ${currentSession.id} ended.`);
             }
@@ -247,5 +314,5 @@ io.on('connection', (socket) => {
 
 // Start the server
 server.listen(4000, () => {
-  console.log('Server is running on port 4000');
+    console.log('Server is running on port 4000');
 });

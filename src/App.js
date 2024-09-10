@@ -16,12 +16,14 @@ const App = () => {
   const [role, setRole] = useState(null);
   const [gameType, setGameType] = useState(null);
   const [roomNumber, setRoomNumber] = useState('');
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [waitingForRole, setWaitingForRole] = useState(false);
 
   useEffect(() => {
-    if (gameType && roomNumber) {
-      socket.emit('joinGame', { gameType, roomNumber });
+    if (gameType && roomNumber && selectedRole) {
+      socket.emit('joinGame', { gameType, roomNumber, role: selectedRole });
     }
-  }, [gameType, roomNumber]);
+  }, [gameType, roomNumber, selectedRole]);
 
   useEffect(() => {
     socket.on('role', (assignedRole) => {
@@ -34,13 +36,28 @@ const App = () => {
     };
   }, []);
 
+  const handleRoleSelection = (role) => {
+    setSelectedRole(role);
+    setWaitingForRole(false);
+  };
+
   const handleGameSelection = (selectedGameType) => {
     const room = prompt('Enter Room Number:');
     if (room) {
       setRoomNumber(room);
       setGameType(selectedGameType);
+      setWaitingForRole(true); // Wait for role selection
     }
   };
+
+  if (waitingForRole) {
+    return (
+      <div>
+        <button onClick={() => handleRoleSelection('host')}>Choose Host</button>
+        <button onClick={() => handleRoleSelection('viewer')}>Choose Viewer</button>
+      </div>
+    );
+  }
 
   if (!gameType) {
     return (
@@ -48,13 +65,11 @@ const App = () => {
         <button onClick={() => handleGameSelection('alienShooting')}>Join Alien Shooting Game</button>
         <button onClick={() => handleGameSelection('platformer')}>Join Platformer Game</button>
         <button onClick={() => handleGameSelection('bomb')}>Join Bomb Defuse</button>
-        <button onClick={() => handleGameSelection('RPS')}>Join RockPaperScissors Game</button>
-        <button onClick={() => handleGameSelection('Card Up Down')}>Join Card UpDOWN</button>
+        <button onClick={() => handleGameSelection('RPS')}>Join Rock Paper Scissors Game</button>
+        <button onClick={() => handleGameSelection('Card Up Down')}>Join Card Up Down</button>
       </div>
     );
   }
-
- 
 
   return (
     <div>
@@ -63,7 +78,6 @@ const App = () => {
       {role === 'host' && gameType === 'platformer' && <Game socket={socket} gameType="platformer" />}
       {role === 'viewer' && gameType === 'platformer' && <Viewer socket={socket} />}
       { gameType === 'RPS' && <RockPaperScissors socket={socket} />}
-      
       {role === 'host' && gameType === 'bomb' && <Bomb socket={socket} />}
       {role === 'viewer' && gameType === 'bomb' && <BombViewer socket={socket} />}
       {gameType === 'Card Up Down' && <CardUpDown />}
