@@ -5,19 +5,36 @@ const BombViewer = ({ socket }) => {
     const [defuseWire, setDefuseWire] = useState('');
 
     useEffect(() => {
-        socket.on('bombStatusUpdate', (newStatus) => {
-            setStatus(newStatus);
-        });
+        // Adding a check to ensure the socket exists before setting up listeners
+        if (socket) {
+            console.log('Setting up socket listeners.');
 
-        socket.on('defuseWire', (wire) => {
-            setDefuseWire(wire);
-        });
+            // Listen for bomb status updates
+            socket.on('bombStatusUpdate', (newStatus) => {
+                console.log('Received bombStatusUpdate:', newStatus);  // Log received status
+                setStatus(newStatus);
+            });
 
+            // Listen for defuse wire information
+            socket.on('defuseWire', (wire) => {
+                console.log('Received defuseWire:', wire);  // Log the defuse wire received
+                setDefuseWire(wire);
+            });
+        }
+
+        // Clean up the listeners on unmount to prevent memory leaks
         return () => {
-            socket.off('bombStatusUpdate');
-            socket.off('defuseWire');
+            if (socket) {
+                socket.off('bombStatusUpdate');
+                socket.off('defuseWire');
+                console.log('Cleaned up socket listeners.');
+            }
         };
     }, [socket]);
+
+    useEffect(() => {
+        console.log('Bomb status has changed:', status);  // Track when status changes
+    }, [status]);
 
     return (
         <div className="bomb-viewer-container">

@@ -54,9 +54,7 @@ const App = () => {
     );
   }
 
-  if (role === null) {
-    return <div>Connecting...</div>;
-  }
+ 
 
   return (
     <div>
@@ -64,8 +62,8 @@ const App = () => {
       {role === 'viewer' && gameType === 'alienShooting' && <AlienViewer socket={socket} />}
       {role === 'host' && gameType === 'platformer' && <Game socket={socket} gameType="platformer" />}
       {role === 'viewer' && gameType === 'platformer' && <Viewer socket={socket} />}
-      {role === 'host' && gameType === 'RPS' && <RockPaperScissors socket={socket} />}
-      {role === 'viewer' && gameType === 'RPS' && <RockPaperScissorsViewer socket={socket} />}
+      { gameType === 'RPS' && <RockPaperScissors socket={socket} />}
+      
       {role === 'host' && gameType === 'bomb' && <Bomb socket={socket} />}
       {role === 'viewer' && gameType === 'bomb' && <BombViewer socket={socket} />}
       {gameType === 'Card Up Down' && <CardUpDown />}

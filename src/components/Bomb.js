@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Wire from './Wire';
+import Wire from './Wire'; // Assumed to be a component that renders wires for cutting
 
 const Bomb = ({ socket }) => {
     const [status, setStatus] = useState('active');
@@ -9,6 +9,7 @@ const Bomb = ({ socket }) => {
         const randomWire = Math.random() < 0.5 ? 'blue' : 'red';
         setDefuseWire(randomWire);
         socket.emit('setDefuseWire', randomWire); // Send the defuse wire to the server
+        console.log(randomWire);
     }, [socket]);
 
     const handleCutWire = (color) => {

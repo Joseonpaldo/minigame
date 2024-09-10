@@ -10,6 +10,7 @@ const RockPaperScissorsViewer = ({ socket }) => {
   const [computerScore, setComputerScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [animateResult, setAnimateResult] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(3); // Timer starts at 3 seconds
 
   useEffect(() => {
     socket.on('rpsPlayerChoice', (choice) => {
@@ -38,23 +39,29 @@ const RockPaperScissorsViewer = ({ socket }) => {
       }
     });
 
+    socket.on('rpsTimeLeft', (time) => {
+      setTimeLeft(time); // Sync timer with host
+    });
+
     return () => {
       socket.off('rpsPlayerChoice');
       socket.off('rpsComputerChoice');
       socket.off('rpsResult');
       socket.off('rpsScore');
       socket.off('rpsRound');
+      socket.off('rpsTimeLeft');
     };
   }, [socket]);
 
+  // Utility function to get image based on the choice
   const getImage = (choice) => {
     switch (choice) {
       case '바위':
-        return '/rock (1).png';
+        return process.env.PUBLIC_URL + '/rock.png'; // Ensure images are in the public folder
       case '보':
-        return '/paper (1).png';
+        return process.env.PUBLIC_URL + '/paper.png';
       case '가위':
-        return '/scissor (1).png';
+        return process.env.PUBLIC_URL + '/scissor.png';
       default:
         return '';
     }
@@ -66,6 +73,15 @@ const RockPaperScissorsViewer = ({ socket }) => {
       <div className="scoreboard">
         Player Score: {playerScore} | Computer Score: {computerScore}
       </div>
+
+      {/* Timer Box for Viewer */}
+      <div className="timer-box">
+        <div
+          className="timer-fill"
+          style={{ width: `${(timeLeft / 3) * 100}%` }} // Shrinking towards center
+        />
+      </div>
+
       <div className="choices">
         <div>
           <p>Player's choice:</p>
@@ -76,6 +92,7 @@ const RockPaperScissorsViewer = ({ socket }) => {
           <img src={getImage(computerChoice)} alt={computerChoice} />
         </div>
       </div>
+
       <h3 className={`result ${animateResult ? 'fadeIn' : ''}`}>{result}</h3>
       {gameOver && (
         <h3>

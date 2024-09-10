@@ -13,7 +13,6 @@ const ROCKET_SPAWN_INTERVAL = 5000;
 const IMMUNITY_DURATION = 1000;  // Immunity duration in milliseconds
 const BOUNCE_HEIGHT = 2;  // Factor to increase the bounce height
 
-
 // Initialize game state
 const initGameState = () => ({
     player: {
@@ -62,6 +61,7 @@ const initGameState = () => ({
     portal: { x: 1100, y: 200, width: 10, height: 60 },
     timeLeft: 60,
     isGameOver: false,
+    winState: false, // Added win state
 });
 
 // Update rocket positions
@@ -76,43 +76,40 @@ const updateRockets = (rockets) => {
 const handlePlayerMovement = (player, input, ladders, platforms) => {
     let { x, y, velY, isJumping, direction, onLadder } = player;
 
-    switch (input) {
-        case 'ArrowLeft':
-            direction = -1;
-            x -= 10;  // Move left
-            break;
-        case 'ArrowRight':
-            direction = 1;
-            x += 10;  // Move right
-            break;
-        case ' ':
-            if (!isJumping) {
-                velY = -JUMP_STRENGTH;  // Jump
-                isJumping = true;
-            }
-            break;
-        case 'g':  // Climb ladders using the 'g' key
-            ladders.forEach(ladder => {
-                if (x + PLAYER_WIDTH > ladder.x && x < ladder.x + 20 && y + PLAYER_HEIGHT > ladder.y && y < ladder.y + ladder.height - 20) {
-                    // Teleport player to the top of the ladder
-                    y = ladder.y - PLAYER_HEIGHT;
-                    isJumping = false;  // Ensure player can jump after climbing
-                    onLadder = true;
+    // Only apply movement input if the player is not flashing (immune)
+    if (!player.isFlashing) {
+        switch (input) {
+            case 'ArrowLeft':
+                direction = -1;
+                x -= 10;  // Move left
+                break;
+            case 'ArrowRight':
+                direction = 1;
+                x += 10;  // Move right
+                break;
+            case ' ':
+                if (!isJumping) {
+                    velY = -JUMP_STRENGTH;  // Jump
+                    isJumping = true;
                 }
-                else if(onLadder=true){
-                    onLadder=false;
-                }
-            });
-            break;
-        default:
-            break;
+                break;
+            case 'g':  // Climb ladders using the 'g' key
+                ladders.forEach(ladder => {
+                    if (x + PLAYER_WIDTH > ladder.x && x < ladder.x + 20 && y + PLAYER_HEIGHT > ladder.y && y < ladder.y + ladder.height - 20) {
+                        // Teleport player to the top of the ladder
+                        y = ladder.y - PLAYER_HEIGHT;
+                        isJumping = false;  // Ensure player can jump after climbing
+                        onLadder = true;
+                    }
+                });
+                break;
+            default:
+                break;
+        }
     }
 
     // Apply gravity if not climbing a ladder
-  
-        velY += GRAVITY;
-    
-
+    velY += GRAVITY;
     y += velY;
 
     // Allow horizontal movement during jumping
@@ -158,39 +155,41 @@ const gameUpdate = (gameState, input) => {
     let newY = player.y;
     let knockedBack = false;
 
-    rockets.forEach((rocket) => {
-        if (
-            player.x < rocket.x + 20 &&
-            player.x + PLAYER_WIDTH > rocket.x &&
-            player.y < rocket.y + 20 &&
-            player.y + PLAYER_HEIGHT > rocket.y
-        ) {
-            newX += rocket.direction === 'left' ? -KNOCKBACK : KNOCKBACK;
-            knockedBack = true;
-        }
-    });
+    // Only apply knockback if the player is not immune
+    if (!player.isImmune) {
+        rockets.forEach((rocket) => {
+            if (
+                player.x < rocket.x + 20 &&
+                player.x + PLAYER_WIDTH > rocket.x &&
+                player.y < rocket.y + 20 &&
+                player.y + PLAYER_HEIGHT > rocket.y
+            ) {
+                newX += rocket.direction === 'left' ? -KNOCKBACK : KNOCKBACK;
+                knockedBack = true;
+            }
+        });
 
-    balls.forEach((ball) => {
-        if (
-            player.x < ball.x + BALL_SIZE &&
-            player.x + PLAYER_WIDTH > ball.x &&
-            player.y < ball.y + BALL_SIZE &&
-            player.y + PLAYER_HEIGHT > ball.y
-        ) {
-            newX += ball.velY > 0 ? KNOCKBACK : -KNOCKBACK;
-            knockedBack = true;
-        }
-    });
+        balls.forEach((ball) => {
+            if (
+                player.x < ball.x + BALL_SIZE &&
+                player.x + PLAYER_WIDTH > ball.x &&
+                player.y < ball.y + BALL_SIZE &&
+                player.y + PLAYER_HEIGHT > ball.y
+            ) {
+                newX += ball.velY > 0 ? KNOCKBACK : -KNOCKBACK;
+                knockedBack = true;
+            }
+        });
 
-    // Apply knockback and manage immunity
-    if (knockedBack) {
-        player = {
-            ...player,
-            isImmune: true,
-            isFlashing: true,
-            velY: 0,
-            immunityStartTime: Date.now(),  // Track when immunity started
-        };
+        // Apply knockback and manage immunity
+        if (knockedBack) {
+            player = {
+                ...player,
+                isImmune: true,
+                isFlashing: true,
+                immunityStartTime: Date.now(),  // Track when immunity started
+            };
+        }
     }
 
     // Handle immunity duration
@@ -213,6 +212,7 @@ const gameUpdate = (gameState, input) => {
         player.y + PLAYER_HEIGHT > portal.y
     ) {
         gameState.isGameOver = true;
+        gameState.winState = true;  // Player wins if they reach the portal
     }
 
     // Update game state
@@ -242,11 +242,8 @@ const startTimer = (gameState, updateTimerCallback) => {
 const spawnRockets = (gameState) => {
     const newRockets = [
         { x: GAME_WIDTH, y: 230, direction: 'left' },
-        { x: 0, y: 260, direction: 'right' },
-        { x: 0, y: 390, direction: 'right' },
         { x: GAME_WIDTH, y: 450, direction: 'left' },
         { x: GAME_WIDTH, y: 680, direction: 'left' },
-        { x: 0, y: 600, direction: 'right' }
     ];
     gameState.rockets = gameState.rockets.concat(newRockets);
 };

@@ -3,7 +3,7 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const http = require('http');
 
-// Import game logic
+// Import game logic for platformer
 const { initGameState, gameUpdate, spawnRockets, updateGameEntities } = require('./platformLogic');
 
 const app = express();
@@ -11,7 +11,7 @@ const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
     origin: 'http://192.168.0.52:3000',  // Use your actual IP address here
-    methods: ['GET', 'POST'],            // Allowed methods
+    methods: ['GET', 'POST'],
   },
 });
 
@@ -19,12 +19,13 @@ const ROCKET_SPAWN_INTERVAL = 5000; // Rockets spawn every 5 seconds
 const GAME_UPDATE_INTERVAL = 1000 / 60; // Game updates 60 times per second (60 FPS)
 const TIMER_UPDATE_INTERVAL = 1000; // Timer updates every 1 second
 const MAX_PLAYERS_PER_SESSION = 4;  // Max players per session
+const GAME_HEIGHT = 800;
 
-let gameSessions = {};  
+let gameSessions = {};
 let gameLoops = {};  // Store game loops for each room
 let timerLoops = {};  // Store timer intervals for each room
 
-// Create a game loop that updates entities (like the timer, balls, etc.) and player movement
+// Platformer game loop
 const startGameLoop = (sessionKey) => {
     gameLoops[sessionKey] = setInterval(() => {
         const session = gameSessions[sessionKey];
@@ -36,13 +37,30 @@ const startGameLoop = (sessionKey) => {
             // Update player position continuously
             session.gameState = gameUpdate(session.gameState, null);
 
+            // Check if the player falls off the map (loss condition)
+            if (session.gameState.player.y > GAME_HEIGHT) {
+                session.gameState.isGameOver = true;
+                io.to(sessionKey).emit('gameOver', { message: 'Game Over! You fell off the map!' });
+                clearInterval(gameLoops[sessionKey]); // Stop the game loop
+                stopGameLoop(sessionKey); // Stop all game loops for this session
+            }
+
+            // Check if the player has won (win condition)
+            if (session.gameState.player.x >= session.gameState.portal.x &&
+                session.gameState.player.y >= session.gameState.portal.y) {
+                session.gameState.isGameOver = true;
+                io.to(sessionKey).emit('gameWin', { message: 'You Win! You reached the portal!' });
+                clearInterval(gameLoops[sessionKey]); // Stop the game loop
+                stopGameLoop(sessionKey); // Stop all game loops for this session
+            }
+
             // Emit the updated game state to all players in the room
             io.to(sessionKey).emit('gameStateUpdate', session.gameState);
         }
     }, GAME_UPDATE_INTERVAL); // 60 updates per second (16.67ms interval)
 };
 
-// Create a timer loop that handles countdown independently
+// Timer loop that handles countdown for platformer
 const startTimerLoop = (sessionKey) => {
     timerLoops[sessionKey] = setInterval(() => {
         const session = gameSessions[sessionKey];
@@ -50,11 +68,50 @@ const startTimerLoop = (sessionKey) => {
         if (session && session.gameState.timeLeft > 0) {
             session.gameState.timeLeft -= 1;  // Decrease time
             io.to(sessionKey).emit('updateTimer', session.gameState.timeLeft);  // Emit time updates to all players
-        } else {
-            clearInterval(timerLoops[sessionKey]);
-            io.to(sessionKey).emit('gameOver');  // Notify players that the game is over
+        } else if (session && session.gameState.timeLeft <= 0) {
+            clearInterval(timerLoops[sessionKey]);  // Stop the timer loop
+            session.gameState.isGameOver = true; // Mark the game as over
+            io.to(sessionKey).emit('gameOver', { message: 'Game Over! Time is up!' });  // Notify players that the time is up
+            stopGameLoop(sessionKey);  // Stop the game loop
         }
     }, TIMER_UPDATE_INTERVAL);  // 1 second interval
+};
+
+// Bomb game logic (host and viewer sync)
+const startBombGame = (sessionKey, socket) => {
+    // Initialize the session if it doesn't exist
+    if (!gameSessions[sessionKey]) {
+        gameSessions[sessionKey] = {
+            id: sessionKey,
+            players: [],
+            host: null,
+            bombState: { status: 'active', defuseWire: '' },  // Initialize bombState here
+        };
+    }
+
+    const currentSession = gameSessions[sessionKey];
+
+    // Host setup
+    if (!currentSession.host) {
+        currentSession.host = socket;
+        socket.emit('role', 'host');
+
+        // Set a random defuse wire
+        const defuseWire = Math.random() < 0.5 ? 'blue' : 'red';
+        currentSession.bombState.defuseWire = defuseWire;
+
+        // Emit the defuse wire to the host and all viewers
+        io.to(sessionKey).emit('defuseWire', defuseWire);
+    } else {
+        // If a viewer joins later, emit the current bomb status and defuse wire
+        socket.emit('role', 'viewer');
+        socket.emit('bombStatusUpdate', currentSession.bombState.status);
+        socket.emit('defuseWire', currentSession.bombState.defuseWire);
+    }
+
+    // Add the player to the room
+    currentSession.players.push(socket);
+    socket.join(currentSession.id);
 };
 
 // Clear the game and timer loops when the session ends
@@ -67,60 +124,73 @@ const stopGameLoop = (sessionKey) => {
         clearInterval(timerLoops[sessionKey]);
         delete timerLoops[sessionKey];
     }
+    // Clear the rocket spawn loop
+    if (gameSessions[sessionKey] && gameSessions[sessionKey].rocketSpawnLoop) {
+        clearInterval(gameSessions[sessionKey].rocketSpawnLoop);
+        delete gameSessions[sessionKey].rocketSpawnLoop;
+    }
 };
 
+// Handle player connection and room setup
 io.on('connection', (socket) => {
     console.log('New client connected');
 
     let currentSession = null;
-    let roleAssigned = false;
 
     // Handle player joining a game
     socket.on('joinGame', ({ gameType, roomNumber }) => {
         const sessionKey = `${gameType}-${roomNumber}`;
 
-        // Create session if it doesn't exist
-        if (!gameSessions[sessionKey]) {
-            gameSessions[sessionKey] = {
-                id: sessionKey,
-                players: [],
-                host: null,
-                gameState: initGameState(),  // Initialize game state for the room
-            };
+        // Platformer Game
+        if (gameType === 'platformer') {
+            // Create session if it doesn't exist
+            if (!gameSessions[sessionKey]) {
+                gameSessions[sessionKey] = {
+                    id: sessionKey,
+                    players: [],
+                    host: null,
+                    gameState: initGameState(),  // Initialize game state for the room
+                };
 
-            // Start the game and timer loops for this room
-            startGameLoop(sessionKey);
-            startTimerLoop(sessionKey);
+                // Start the game and timer loops for this room
+                startGameLoop(sessionKey);
+                startTimerLoop(sessionKey);
+            }
+
+            currentSession = gameSessions[sessionKey];
+
+            // Add the player to the room
+            currentSession.players.push(socket);
+            socket.join(currentSession.id);
+
+            console.log(`Player joined session: ${sessionKey}`);
+
+            // If a host already exists, assign the new player as a viewer
+            if (currentSession.host) {
+                socket.emit('role', 'viewer');
+                socket.emit('initialGameState', currentSession.gameState);  // Send the initial map and state
+            } else {
+                // Assign the first player as the host
+                currentSession.host = socket;
+                socket.emit('role', 'host');
+            }
+
+            // Broadcast player count
+            io.to(currentSession.id).emit('playerCount', currentSession.players.length);
+
+            // Start rocket spawning at intervals (for this specific room)
+            if (!currentSession.rocketSpawnLoop) {
+                currentSession.rocketSpawnLoop = setInterval(() => {
+                    spawnRockets(currentSession.gameState);
+                    io.to(currentSession.id).emit('updateRockets', currentSession.gameState.rockets);
+                }, ROCKET_SPAWN_INTERVAL);
+            }
         }
 
-        currentSession = gameSessions[sessionKey];
-
-        // Add the player to the room
-        currentSession.players.push(socket);
-        socket.join(currentSession.id);
-
-        console.log(`Player joined session: ${sessionKey}`);
-
-        // Assign host if it's the first player in the room
-        if (currentSession.players.length === 1) {
-            currentSession.host = socket;
-            roleAssigned = true;
-            socket.emit('role', 'host');
-        } else {
-            roleAssigned = true;
-            socket.emit('role', 'viewer');
-            socket.emit('initialGameState', currentSession.gameState);  // Send the initial map and state
-        }
-
-        // Broadcast player count
-        io.to(currentSession.id).emit('playerCount', currentSession.players.length);
-
-        // Start rocket spawning at intervals (for this specific room)
-        if (!gameLoops[sessionKey]) {
-            gameLoops[sessionKey] = setInterval(() => {
-                spawnRockets(currentSession.gameState);
-                io.to(currentSession.id).emit('updateRockets', currentSession.gameState.rockets);
-            }, ROCKET_SPAWN_INTERVAL);
+        // Bomb Game
+        if (gameType === 'bomb') {
+            startBombGame(sessionKey, socket);
+            currentSession = gameSessions[sessionKey]; // Ensure the session is assigned here
         }
     });
 
@@ -129,6 +199,29 @@ io.on('connection', (socket) => {
         if (currentSession) {
             currentSession.gameState = gameUpdate(currentSession.gameState, input);
             io.to(currentSession.id).emit('gameStateUpdate', currentSession.gameState);
+        }
+    });
+
+    // Handle bomb status updates
+    socket.on('setDefuseWire', (wire) => {
+        console.log("Received setDefuseWire event with wire:", wire); // Log the wire received
+        if (currentSession && currentSession.bombState && socket === currentSession.host) {
+            currentSession.bombState.defuseWire = wire;
+            io.to(currentSession.id).emit('defuseWire', wire);
+            console.log("Defuse Wire set and emitted:", wire);
+        } else {
+            console.log("setDefuseWire failed: Invalid session or host.");
+        }
+    });
+
+    socket.on('bombStatus', (status) => {
+        console.log("Received bombStatus event with status:", status); // Log the status received
+        if (currentSession && currentSession.bombState) {
+            currentSession.bombState.status = status;
+            io.to(currentSession.id).emit('bombStatusUpdate', status);
+            console.log("Bomb status set and emitted:", status);
+        } else {
+            console.log("bombStatus failed: Invalid session or not a bomb game.");
         }
     });
 
@@ -144,7 +237,7 @@ io.on('connection', (socket) => {
 
             // If no players are left in the session, clear the intervals and delete the session
             if (currentSession.players.length === 0) {
-                stopGameLoop(currentSession.id);  // Stop the game and timer loops for the room
+                stopGameLoop(currentSession.id);  // Stop the game, timer, and rocket loops for the room
                 delete gameSessions[currentSession.id];
                 console.log(`Session ${currentSession.id} ended.`);
             }

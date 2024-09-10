@@ -18,6 +18,7 @@ const Game = ({ socket }) => {
     const [isGameOver, setIsGameOver] = useState(false);
     const [gameStarted, setGameStarted] = useState(false);
     const [portal, setPortal] = useState({}); // Ensure portal is initialized correctly
+    const [winMessage, setWinMessage] = useState(''); // Store win/loss messages
 
     // Listen to socket events for initial game state and updates
     useEffect(() => {
@@ -43,9 +44,22 @@ const Game = ({ socket }) => {
             setIsGameOver(updatedState.isGameOver);
         });
 
+        // Listen for game win and game over events
+        socket.on('gameWin', (data) => {
+            setWinMessage(data.message);
+            setIsGameOver(true);
+        });
+
+        socket.on('gameOver', (data) => {
+            setWinMessage(data.message || 'Game Over!'); // Default message if none is provided
+            setIsGameOver(true);
+        });
+
         return () => {
             socket.off('initialGameState');
             socket.off('gameStateUpdate');
+            socket.off('gameWin');
+            socket.off('gameOver');
         };
     }, [socket]);
 
@@ -63,8 +77,9 @@ const Game = ({ socket }) => {
         };
     }, []);
 
+    // If the game is over, display the game over message
     if (isGameOver) {
-        return <div className="game-over">Game Over</div>;
+        return <div className="game-over">{winMessage}</div>;
     }
 
     // Zoom based on the player's position
