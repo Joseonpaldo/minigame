@@ -69,16 +69,16 @@ function addPlayer(socket, roomId, userName, userColor, rooms) {
 }
 
 // 플레이어 제거 함수
-function removePlayer(socket, playerId, roomId, room) {
-    if (room) {
-        delete room.players[playerId]; // 플레이어 제거
+function removePlayer(socket, playerId, roomId, rooms) {
+    if (rooms[roomId]) {
+        delete rooms[roomId].players[playerId]; // 플레이어 제거
 
         // 만약 방에 더 이상 플레이어가 없다면 방 삭제
-        if (Object.keys(room.players).length === 0) {
+        if (Object.keys(rooms[roomId].players).length === 0) {
             delete rooms[roomId];
         } else {
             // 플레이어가 방에 남아있는 경우, 게임 상태를 모든 클라이언트에 전송
-            broadcastGameState(socket, roomId, room);
+            broadcastGameState(socket, roomId, rooms[roomId]);
         }
     }
 }

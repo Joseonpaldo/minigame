@@ -26,12 +26,12 @@ module.exports = (io) => {
         });
 
         socket.on('move', (direction) => {
-            const roomId = [...socket.rooms][1]; // socket.rooms 배열에서 방 ID 가져오기
+            const roomId = clientRooms[socket.id];
             gameLogic.updatePlayerDirection(socket.id, direction, roomId, rooms);
         });
     
         socket.on('countdownFinished', () => {
-            const roomId = [...socket.rooms][1]; // socket.rooms 배열에서 방 ID 가져오기
+            const roomId = clientRooms[socket.id];
             const room = rooms[roomId];
         
             if (room) {
@@ -42,9 +42,10 @@ module.exports = (io) => {
         });
     
         socket.on('disconnect', () => {
-            const roomId = clientRooms[socket.id];
-            console.log('A user disconnected:', rooms[roomId].players[socket.id].id);
-            gameLogic.removePlayer(socket, socket.id, roomId, rooms[roomId]); // 방에서 플레이어 제거 및 상태 업데이트
+            if(clientRooms[socket.id]) {
+                const roomId = clientRooms[socket.id];
+                gameLogic.removePlayer(socket, socket.id, roomId, rooms); // 방에서 플레이어 제거 및 상태 업데이트
+            }
         });
     });
 }
