@@ -115,30 +115,91 @@ const startBombGame = (sessionKey, socket) => {
 };
 
 // Rock Paper Scissors (RPS) game logic
-const startRPSGame = (sessionKey, socket) => {
+const startRPSGame = (sessionKey, socket, role) => {
     // Initialize the session if it doesn't exist
     if (!gameSessions[sessionKey]) {
+        console.log(`Creating new RPS session for room: ${sessionKey}`);
         gameSessions[sessionKey] = {
             id: sessionKey,
             players: [],
-            host: null,
-            gameState: { playerScore: 0, computerScore: 0, round: 1 },  // Initialize RPS game state
+            host: null,  // Host will be set explicitly by client
+            gameState: {
+                playerScore: 0,
+                computerScore: 0,
+                round: 1,
+                playerChoice: null,
+                computerChoice: null,
+                result: '',
+                isGameOver: false,
+            },
         };
     }
 
     const currentSession = gameSessions[sessionKey];
 
-    // Host setup
-    if (!currentSession.host) {
-        currentSession.host = socket;
-        socket.emit('role', 'host');
-    } else {
-        socket.emit('role', 'viewer');
-    }
-
-    // Add the player to the room
+    // Add player to the session
     currentSession.players.push(socket);
     socket.join(currentSession.id);
+    console.log(`Player joined RPS session: ${sessionKey} as ${role}`);
+
+    // Assign role based on client input
+    if (role === 'host') {
+        currentSession.host = socket;
+        socket.emit('role', 'host');
+        console.log(`Assigned host to RPS session: ${sessionKey}`);
+    } else {
+        socket.emit('role', 'viewer');
+        console.log(`Assigned viewer to RPS session: ${sessionKey}`);
+    }
+
+    // Emit initial game state
+    socket.emit('initialGameState', currentSession.gameState);
+
+    // Listen for timer updates and broadcast them to all viewers
+    socket.on('rpsTimeLeft', (timeLeft) => {
+        currentSession.gameState.timeLeft = timeLeft;
+        io.to(currentSession.id).emit('rpsTimeLeft', timeLeft);
+    });
+
+    // Listener for player choice and broadcast to all viewers
+    socket.on('rpsPlayerChoice', (choice) => {
+        currentSession.gameState.playerChoice = choice;
+        io.to(currentSession.id).emit('rpsPlayerChoice', choice);
+    });
+
+    // Listener for computer choice and broadcast to all viewers
+    socket.on('rpsComputerChoice', (computerChoice) => {
+        currentSession.gameState.computerChoice = computerChoice;
+        io.to(currentSession.id).emit('rpsComputerChoice', computerChoice);
+    });
+
+    // Listener for game result and broadcast to all viewers
+    socket.on('rpsResult', (result) => {
+        currentSession.gameState.result = result;
+        io.to(currentSession.id).emit('rpsResult', result);
+    });
+
+    // Listener for scores and broadcast to all viewers
+    socket.on('rpsScore', ({ playerScore, computerScore }) => {
+        currentSession.gameState.playerScore = playerScore;
+        currentSession.gameState.computerScore = computerScore;
+        io.to(currentSession.id).emit('rpsScore', {
+            playerScore,
+            computerScore
+        });
+    });
+
+    // Listener for the round number and broadcast to all viewers
+    socket.on('round', (round) => {
+        currentSession.gameState.round = round;
+        io.to(currentSession.id).emit('rpsRound', round);
+    });
+
+    // Listener for game over status and broadcast to all viewers
+    socket.on('rpsFinalResult', (finalResult) => {
+        currentSession.gameState.isGameOver = true;
+        io.to(currentSession.id).emit('rpsFinalResult', finalResult);
+    });
 };
 
 // Clear the game and timer loops when the session ends
@@ -167,6 +228,20 @@ io.on('connection', (socket) => {
     // Handle player joining a game
     socket.on('joinGame', ({ gameType, roomNumber, role }) => {
         const sessionKey = `${gameType}-${roomNumber}`;
+        console.log(`joinGame event received: gameType: ${gameType}, roomNumber: ${roomNumber}, role: ${role}`);
+
+        // Rock Paper Scissors Game
+        if (gameType === 'RPS') {
+            startRPSGame(sessionKey, socket, role);
+            currentSession = gameSessions[sessionKey];  // Ensure the session is assigned here
+        }
+
+        // Handle other game types...
+        // Bomb Game
+        if (gameType === 'bomb') {
+            startBombGame(sessionKey, socket);
+            currentSession = gameSessions[sessionKey]; // Ensure the session is assigned here
+        }
 
         // Platformer Game
         if (gameType === 'platformer') {
@@ -178,62 +253,30 @@ io.on('connection', (socket) => {
                     gameState: initGameState(),  // Initialize game state for the room
                 };
 
-                // Start the game and timer loops for this room
                 startGameLoop(sessionKey);
                 startTimerLoop(sessionKey);
             }
 
             currentSession = gameSessions[sessionKey];
-
-            // Add the player to the room
             currentSession.players.push(socket);
             socket.join(currentSession.id);
 
             console.log(`Player joined session: ${sessionKey}`);
 
-            if (role === 'host') {
+            if (currentSession.host) {
+                socket.emit('role', 'viewer');
+                socket.emit('initialGameState', currentSession.gameState);
+            } else {
                 currentSession.host = socket;
                 socket.emit('role', 'host');
-            } else {
-                socket.emit('role', 'viewer');
-                socket.emit('initialGameState', currentSession.gameState);  // Send the initial map and state
             }
 
-            // Broadcast player count
             io.to(currentSession.id).emit('playerCount', currentSession.players.length);
-
-            // Start rocket spawning at intervals (for this specific room)
             if (!currentSession.rocketSpawnLoop) {
                 currentSession.rocketSpawnLoop = setInterval(() => {
                     spawnRockets(currentSession.gameState);
                     io.to(currentSession.id).emit('updateRockets', currentSession.gameState.rockets);
                 }, ROCKET_SPAWN_INTERVAL);
-            }
-        }
-
-        // Bomb Game
-        if (gameType === 'bomb') {
-            startBombGame(sessionKey, socket);
-            currentSession = gameSessions[sessionKey]; // Ensure the session is assigned here
-
-            if (role === 'host') {
-                socket.emit('role', 'host');
-            } else {
-                socket.emit('role', 'viewer');
-                socket.emit('bombStatusUpdate', currentSession.bombState.status);
-                socket.emit('defuseWire', currentSession.bombState.defuseWire);
-            }
-        }
-
-        // Rock Paper Scissors Game
-        if (gameType === 'rps') {
-            startRPSGame(sessionKey, socket);
-            currentSession = gameSessions[sessionKey]; // Ensure the session is assigned here
-
-            if (role === 'host') {
-                socket.emit('role', 'host');
-            } else {
-                socket.emit('role', 'viewer');
             }
         }
     });
@@ -248,61 +291,23 @@ io.on('connection', (socket) => {
 
     // Handle bomb status updates
     socket.on('setDefuseWire', (wire) => {
-        console.log("Received setDefuseWire event with wire:", wire);
         if (currentSession && currentSession.bombState && socket === currentSession.host) {
             currentSession.bombState.defuseWire = wire;
             io.to(currentSession.id).emit('defuseWire', wire);
-            console.log("Defuse Wire set and emitted:", wire);
-        } else {
-            console.log("setDefuseWire failed: Invalid session or host.");
         }
     });
 
     socket.on('bombStatus', (status) => {
-        console.log("Received bombStatus event with status:", status);
         if (currentSession && currentSession.bombState) {
             currentSession.bombState.status = status;
             io.to(currentSession.id).emit('bombStatusUpdate', status);
-            console.log("Bomb status set and emitted:", status);
-        } else {
-            console.log("bombStatus failed: Invalid session or not a bomb game.");
         }
     });
 
-    // Handle Rock Paper Scissors game events
-    socket.on('rpsPlayerChoice', (choice) => {
-        if (currentSession && currentSession.gameState) {
-            io.to(currentSession.id).emit('rpsPlayerChoice', choice);
-        }
-    });
-
-    socket.on('rpsComputerChoice', (choice) => {
-        if (currentSession && currentSession.gameState) {
-            io.to(currentSession.id).emit('rpsComputerChoice', choice);
-        }
-    });
-
-    socket.on('rpsResult', (result) => {
-        if (currentSession && currentSession.gameState) {
-            currentSession.gameState.result = result;
-            io.to(currentSession.id).emit('rpsResult', result);
-        }
-    });
-
-    socket.on('rpsScore', ({ playerScore, computerScore }) => {
-        if (currentSession && currentSession.gameState) {
-            currentSession.gameState.playerScore = playerScore;
-            currentSession.gameState.computerScore = computerScore;
-            io.to(currentSession.id).emit('rpsScore', { playerScore, computerScore });
-        }
-    });
-
+    // Handle disconnect
     socket.on('disconnect', () => {
         if (currentSession) {
             currentSession.players = currentSession.players.filter(player => player !== socket);
-
-            io.to(currentSession.id).emit('playerCount', currentSession.players.length);
-
             if (currentSession.players.length === 0) {
                 stopGameLoop(currentSession.id);
                 delete gameSessions[currentSession.id];
@@ -314,5 +319,5 @@ io.on('connection', (socket) => {
 
 // Start the server
 server.listen(4000, () => {
-    console.log('Server is running on port 4000');
+  console.log('Server is running on port 4000');
 });

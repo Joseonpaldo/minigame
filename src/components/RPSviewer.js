@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './css/RockPaperScissorsViewer.css'; // Add custom styles here
 
-const RockPaperScissorsViewer = ({ socket }) => {
+const RPSviewer = ({ socket }) => {
   const [playerChoice, setPlayerChoice] = useState(null);
   const [computerChoice, setComputerChoice] = useState(null);
   const [result, setResult] = useState('');
@@ -13,25 +13,30 @@ const RockPaperScissorsViewer = ({ socket }) => {
   const [timeLeft, setTimeLeft] = useState(3); // Timer starts at 3 seconds
 
   useEffect(() => {
+    // Listen for player choice from the server
     socket.on('rpsPlayerChoice', (choice) => {
       setPlayerChoice(choice);
     });
 
+    // Listen for computer choice from the server
     socket.on('rpsComputerChoice', (choice) => {
       setComputerChoice(choice);
     });
 
+    // Listen for game result from the server
     socket.on('rpsResult', (outcome) => {
       setResult(outcome);
       setAnimateResult(true);
       setTimeout(() => setAnimateResult(false), 1000);
     });
 
+    // Listen for updated scores from the server
     socket.on('rpsScore', ({ playerScore, computerScore }) => {
       setPlayerScore(playerScore);
       setComputerScore(computerScore);
     });
 
+    // Listen for the current round number from the server
     socket.on('rpsRound', (round) => {
       setRound(round);
       if (round > 3) {
@@ -39,10 +44,12 @@ const RockPaperScissorsViewer = ({ socket }) => {
       }
     });
 
+    // Listen for time updates from the server
     socket.on('rpsTimeLeft', (time) => {
       setTimeLeft(time); // Sync timer with host
     });
 
+    // Clean up the event listeners when the component unmounts
     return () => {
       socket.off('rpsPlayerChoice');
       socket.off('rpsComputerChoice');
@@ -68,7 +75,7 @@ const RockPaperScissorsViewer = ({ socket }) => {
   };
 
   return (
-    <div className="App">
+    <div className="game-wrapper">
       <h2>Rock Paper Scissors - Viewer - Round {round}</h2>
       <div className="scoreboard">
         Player Score: {playerScore} | Computer Score: {computerScore}
@@ -82,12 +89,13 @@ const RockPaperScissorsViewer = ({ socket }) => {
         />
       </div>
 
-      <div className="choices">
-        <div>
+      {/* Adding choices-container for consistent layout */}
+      <div className="choices-container">
+        <div className={`hand ${result === 'You Win' ? 'jump' : ''}`}>
           <p>Player's choice:</p>
           <img src={getImage(playerChoice)} alt={playerChoice} />
         </div>
-        <div>
+        <div className={`hand ${result === 'You Lose' ? 'jump' : ''}`}>
           <p>Computer's choice:</p>
           <img src={getImage(computerChoice)} alt={computerChoice} />
         </div>
@@ -107,4 +115,4 @@ const RockPaperScissorsViewer = ({ socket }) => {
   );
 };
 
-export default RockPaperScissorsViewer;
+export default RPSviewer;

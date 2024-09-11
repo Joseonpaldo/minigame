@@ -35,7 +35,7 @@ const RockPaperScissors = ({ socket }) => {
   }, [timeLeft, gameOver, socket]);
 
   const playGame = (choice) => {
-    if (gameOver) return;
+    if (gameOver || round > 3) return;
 
     setPlayerChoice(choice);
     socket.emit('rpsPlayerChoice', choice);
@@ -91,41 +91,13 @@ const RockPaperScissors = ({ socket }) => {
       alert(finalOutcome);
     } else {
       setRound(round + 1);
+      socket.emit('round', round);
       setTimeLeft(3); // Reset the timer for the next round
     }
 
     setAnimateResult(true);
     setTimeout(() => setAnimateResult(false), 1000);
   };
-
-  // Listening to socket events from server
-  useEffect(() => {
-    socket.on('rpsPlayerChoice', (choice) => {
-      setPlayerChoice(choice);
-    });
-
-    socket.on('rpsComputerChoice', (choice) => {
-      setComputerChoice(choice);
-    });
-
-    socket.on('rpsResult', (outcome) => {
-      setResult(outcome);
-      setAnimateResult(true);
-      setTimeout(() => setAnimateResult(false), 1000);
-    });
-
-    socket.on('rpsScore', ({ playerScore, computerScore }) => {
-      setPlayerScore(playerScore);
-      setComputerScore(computerScore);
-    });
-
-    return () => {
-      socket.off('rpsPlayerChoice');
-      socket.off('rpsComputerChoice');
-      socket.off('rpsResult');
-      socket.off('rpsScore');
-    };
-  }, [socket]);
 
   // Utility to get the correct image for the choices
   const getImage = (choice) => {
@@ -142,7 +114,7 @@ const RockPaperScissors = ({ socket }) => {
   };
 
   return (
-    <div className="App">
+    <div className="game-wrapper">
       <h2>Rock Paper Scissors - Round {round}</h2>
       <div>Player Score: {playerScore} | Computer Score: {computerScore}</div>
 
