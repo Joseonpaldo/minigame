@@ -12,8 +12,6 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.19.3",
-    "nws": "file:",
-    "NWS": "file:",
     "socket.io": "^4.7.5"
   }
 }

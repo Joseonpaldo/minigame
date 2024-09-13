@@ -17,6 +17,7 @@ let timerLoops = {};  // Store timer intervals for each room
 const GAME_UPDATE_INTERVAL = 1000 / 144; // Game updates 60 times per second (60 FPS)
 const TIMER_UPDATE_INTERVAL = 1000; // Timer updates every 1 second
 
+
 // Initialize game state
 const initGameState = () => ({
     player: {

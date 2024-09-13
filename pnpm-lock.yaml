@@ -8,14 +8,11 @@ importers:
 
   .:
     dependencies:
-      NWS:
-        specifier: 'file:'
-        version: 'file:'
       cors:
         specifier: ^2.8.5
         version: 2.8.5
       express:
-        specifier: ^4.21.0
+        specifier: ^4.19.3
         version: 4.21.0
       socket.io:
         specifier: ^4.7.5
@@ -34,9 +31,6 @@ packages:
 
   '@types/node@22.5.4':
     resolution: {integrity: sha512-FDuKUJQm/ju9fT/SeX/6+gBzoPzlVCzfzmGkwKvRHQVxi4BntVbyIwf6a4Xn62mrvndLiml6z/UBXIdEVjQLXg==}
-
-  'NWS@file:':
-    resolution: {directory: '', type: directory}
 
   accepts@1.3.8:
     resolution: {integrity: sha512-PYAthTa2m2VKxuvSD3DPC/Gy+U+sOA1LAuT8mkmRuvw+NACSaeXEQ+NHcVF7rONl6qcaxV3Uuemwawk+7+SJLw==}
@@ -360,16 +354,6 @@ snapshots:
   '@types/node@22.5.4':
     dependencies:
       undici-types: 6.19.8
-
-  'NWS@file:':
-    dependencies:
-      cors: 2.8.5
-      express: 4.21.0
-      socket.io: 4.7.5
-    transitivePeerDependencies:
-      - bufferutil
-      - supports-color
-      - utf-8-validate
 
   accepts@1.3.8:
     dependencies:

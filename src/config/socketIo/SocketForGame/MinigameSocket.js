@@ -1,37 +1,12 @@
-const { initGameState, gameUpdate, spawnRockets, updateGameEntities, stopGameLoop, startGameLoop, startTimerLoop } = require('../../../game/mini/platformLogic');
+const { initGameState, stopGameLoop, startGameLoop, startTimerLoop, spawnRockets, gameUpdate } = require('../../../game/mini/platformLogic');
 const { startBombGame } = require('../../../game/mini/bombLogic');
+const { startRPSGame } = require('../../../game/mini/rpsLogic');
+
+const ROCKET_SPAWN_INTERVAL = 5000; // Rockets spawn every 5 seconds
 
 module.exports = (io) => {
-    const ROCKET_SPAWN_INTERVAL = 5000; // Rockets spawn every 5 seconds
 
     let gameSessions = {};
-
-    // Rock Paper Scissors (RPS) game logic
-    const startRPSGame = (sessionKey, socket) => {
-        // Initialize the session if it doesn't exist
-        if (!gameSessions[sessionKey]) {
-            gameSessions[sessionKey] = {
-                id: sessionKey,
-                players: [],
-                host: null,
-                gameState: { playerScore: 0, computerScore: 0, round: 1 },  // Initialize RPS game state
-            };
-        }
-
-        const currentSession = gameSessions[sessionKey];
-
-        // Host setup
-        if (!currentSession.host) {
-            currentSession.host = socket;
-            socket.emit('role', 'host');
-        } else {
-            socket.emit('role', 'viewer');
-        }
-
-        // Add the player to the room
-        currentSession.players.push(socket);
-        socket.join(currentSession.id);
-    };
 
     // Handle player connection and room setup
     io.on('connection', (socket) => {
@@ -76,24 +51,44 @@ module.exports = (io) => {
 
             // Bomb Game
             if (gameType === 'bomb') {
-                startBombGame(sessionKey, socket, role);
+                // Initialize the session if it doesn't exist
+                if (!gameSessions[sessionKey]) {
+                    gameSessions[sessionKey] = {
+                        id: sessionKey,
+                        players: [],
+                        host: null,
+                        bombState: { status: 'active', defuseWire: Math.random() < 0.5 ? 'blue' : 'red' },  // Initialize bombState here
+                    };
+                }
+
                 currentSession = gameSessions[sessionKey]; // Ensure the session is assigned here
+
+                startBombGame(currentSession, socket, role);
             }
 
             // Rock Paper Scissors Game
             if (gameType === 'RPS') {
-                startRPSGame(sessionKey, socket);
-                currentSession = gameSessions[sessionKey]; // Ensure the session is assigned here
-
-                if (role === 'host') {
-                    socket.emit('role', 'host');
-                } else {
-                    socket.emit('role', 'viewer');
+                // Initialize the session if it doesn't exist
+                if (!gameSessions[sessionKey]) {
+                    gameSessions[sessionKey] = {
+                        id: sessionKey,
+                        players: [],
+                        host: null,
+                        gameState: { 
+                            playerScore: 0, 
+                            computerScore: 0, 
+                            round: 1,
+                            isGameOver: false
+                        },  // Initialize RPS game state
+                    };
                 }
+
+                currentSession = gameSessions[sessionKey]; // Ensure the session is assigned here
+                startRPSGame(currentSession, socket);
             }
         });
 
-        // Platformer Event
+        // Platformer Logic
         // Handle player input (movement, actions)
         socket.on('playerInput', (input) => {
             if (currentSession) {
@@ -116,6 +111,16 @@ module.exports = (io) => {
             }
         });
 
+        socket.on('playerImage', (image) => {
+            io.to(currentSession.id).emit('viewerImageReceived', image);
+        });
+
+        socket.on('requestImage', () => {
+            if(currentSession.host) {
+                currentSession.host.emit('requestImageForViewer');
+            }
+        })
+
         // BombGame Events
         // Handle wire cut event
         socket.on('wireCut', (wireColor) => {
@@ -135,35 +140,27 @@ module.exports = (io) => {
 
         // RPSGame Events
         // Handle Player Choice
-        socket.on('rpsPlayerChoice', (choice) => {
-            if (currentSession && currentSession.gameState) {
-                io.to(currentSession.id).emit('rpsPlayerChoice', choice);
-            }
-        });
+        socket.on('playerChoice', (playerChoice) => {
+            if (currentSession) {
+                const computerChoice = getComputerChoice();
+                const result = checkWinner(playerChoice, computerChoice);
 
-        // Handle Computer Choice
-        socket.on('rpsComputerChoice', (choice) => {
-            if (currentSession && currentSession.gameState) {
-                io.to(currentSession.id).emit('rpsComputerChoice', choice);
-            }
-        });
+                if (result === 1) {
+                    currentSession.gameState.playerScore++;
+                } else if (result === 2) {
+                    currentSession.gameState.computerScore++;
+                } else {
+                    round --;
+                }
 
-        // Hanlde RPS Result
-        socket.on('rpsResult', (result) => {
-            if (currentSession && currentSession.gameState) {
-                currentSession.gameState.result = result;
-                io.to(currentSession.id).emit('rpsResult', result);
+                currentSession.gameState.round++;
+                if(currentSession.gameState.round > 4) {
+                    currentSession.gameState.isGameOver = true;
+                }else {
+                    io.to(currentSession.id).emit('gameStateUpdate', currentSession.gameState);
+                }
             }
-        });
-
-        // Handle RPS Score
-        socket.on('rpsScore', ({ playerScore, computerScore }) => {
-            if (currentSession && currentSession.gameState) {
-                currentSession.gameState.playerScore = playerScore;
-                currentSession.gameState.computerScore = computerScore;
-                io.to(currentSession.id).emit('rpsScore', { playerScore, computerScore });
-            }
-        });
+        })
 
         socket.on('disconnect', () => {
             if (currentSession) {
@@ -172,6 +169,7 @@ module.exports = (io) => {
                 if (currentSession.players.length === 0) {
                     stopGameLoop(currentSession.id);
                     delete gameSessions[currentSession.id];
+                    console.log(JSON.stringify(gameSessions[currentSession.id]));
                     console.log(`Session ${currentSession.id} ended.`);
                 }
             }
