@@ -11,7 +11,7 @@ exports.initSocket = (server) => {
     const io = socketIo(server, {
         path: '/nws',
         cors: {
-            origin: "*",
+            origin: "https://joseonpaldo.site",
             methods: ['GET', 'POST']
         }
     });
