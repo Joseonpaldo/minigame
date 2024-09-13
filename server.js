@@ -9,7 +9,7 @@ const port = 4000;
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN,
+  origin: "*",
   methods: ['GET', 'POST']
 }));
 app.use(express.json());
