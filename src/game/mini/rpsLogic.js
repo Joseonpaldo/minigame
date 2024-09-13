@@ -1,3 +1,32 @@
+const timerLoop = {};
+
+const rpsTimerLoop = (currentSession, io) => {
+    timerLoop[currentSession.id] = setInterval(() => {
+        if (currentSession.timeLeft < 0) {
+            stopRpsTimerLoop(currentSession);
+            currentSession.timeLeft = 3;
+            currentSession.gameState.win = 2;
+            currentSession.gameState.computerScore++;
+            currentSession.gameState.round++;
+
+            if(currentSession.gameState.round > 3) {
+                currentSession.gameState.isGameOver = true;
+            }else {
+                rpsTimerLoop(currentSession, io);
+            }
+
+            io.to(currentSession.id).emit('rpsState', null, null, currentSession.gameState);
+        } else {
+            io.to(currentSession.id).emit('rpsTimeLeft', currentSession.timeLeft);
+            currentSession.timeLeft -= 1 / 60;
+        }
+    }, 1000 / 60);
+};
+
+const stopRpsTimerLoop = (currentSession) => {
+    clearInterval(timerLoop[currentSession.id]);
+}; 
+
 // Rock Paper Scissors (RPS) game logic
 const startRPSGame = (currentSession, socket) => {
     // Host setup
@@ -15,7 +44,7 @@ const getComputerChoice = () => {
     const randomIndex = Math.floor(Math.random() * 3);
 
     return choices[randomIndex];
-}
+};
 
 // 1 for win 2 for lose 0 for draw
 const checkWinner = (playerChoice, computerChoice) => {
@@ -32,8 +61,12 @@ const checkWinner = (playerChoice, computerChoice) => {
     }
 
     return 2;
-}
+};
 
 module.exports = {
-    startRPSGame
+    startRPSGame,
+    getComputerChoice,
+    checkWinner,
+    rpsTimerLoop,
+    stopRpsTimerLoop
 };

@@ -1,6 +1,6 @@
 const { initGameState, stopGameLoop, startGameLoop, startTimerLoop, spawnRockets, gameUpdate } = require('../../../game/mini/platformLogic');
 const { startBombGame } = require('../../../game/mini/bombLogic');
-const { startRPSGame } = require('../../../game/mini/rpsLogic');
+const { startRPSGame, getComputerChoice, checkWinner, rpsTimerLoop, stopRpsTimerLoop } = require('../../../game/mini/rpsLogic');
 
 const ROCKET_SPAWN_INTERVAL = 5000; // Rockets spawn every 5 seconds
 
@@ -60,7 +60,7 @@ module.exports = (io) => {
                         bombState: { status: 'active', defuseWire: Math.random() < 0.5 ? 'blue' : 'red' },  // Initialize bombState here
                     };
                 }
-
+                console.log(`Player joined session: ${sessionKey}`);
                 currentSession = gameSessions[sessionKey]; // Ensure the session is assigned here
 
                 startBombGame(currentSession, socket, role);
@@ -78,13 +78,20 @@ module.exports = (io) => {
                             playerScore: 0, 
                             computerScore: 0, 
                             round: 1,
-                            isGameOver: false
-                        },  // Initialize RPS game state
+                            win: null,
+                            isGameOver: false,
+                        },
+                        timeLeft: 3  // Initialize RPS game state
                     };
                 }
-
+                console.log(`Player joined session: ${sessionKey}`);
                 currentSession = gameSessions[sessionKey]; // Ensure the session is assigned here
                 startRPSGame(currentSession, socket);
+                if(role === 'host') {
+                    startTimerLoop(currentSession, io);
+                }
+                console.log("current state: "+JSON.stringify(currentSession.gameState));
+                io.to(currentSession.id).emit('rpsState', null, null, currentSession.gameState);
             }
         });
 
@@ -119,7 +126,7 @@ module.exports = (io) => {
             if(currentSession.host) {
                 currentSession.host.emit('requestImageForViewer');
             }
-        })
+        });
 
         // BombGame Events
         // Handle wire cut event
@@ -140,7 +147,7 @@ module.exports = (io) => {
 
         // RPSGame Events
         // Handle Player Choice
-        socket.on('playerChoice', (playerChoice) => {
+        socket.on('rpsPlayerChoice', (playerChoice) => {
             if (currentSession) {
                 const computerChoice = getComputerChoice();
                 const result = checkWinner(playerChoice, computerChoice);
@@ -150,17 +157,24 @@ module.exports = (io) => {
                 } else if (result === 2) {
                     currentSession.gameState.computerScore++;
                 } else {
-                    round --;
+                    currentSession.gameState.round--;
                 }
 
+                currentSession.gameState.win = result;
                 currentSession.gameState.round++;
-                if(currentSession.gameState.round > 4) {
+                stopRpsTimerLoop(currentSession);
+                
+
+                if(currentSession.gameState.round > 3) {
                     currentSession.gameState.isGameOver = true;
-                }else {
-                    io.to(currentSession.id).emit('gameStateUpdate', currentSession.gameState);
                 }
+
+                if(!currentSession.gameState.isGameOver) {
+                    rpsTimerLoop(currentSession, io);
+                }
+                io.to(currentSession.id).emit('rpsState', playerChoice, computerChoice, currentSession.gameState);
             }
-        })
+        });
 
         socket.on('disconnect', () => {
             if (currentSession) {
