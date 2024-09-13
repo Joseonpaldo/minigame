@@ -1,5 +1,5 @@
 {
-  "name": "NWS",
+  "name": "nws",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -11,7 +11,8 @@
   "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^4.19.2",
+    "express": "^4.19.3",
+    "nws": "file:",
     "NWS": "file:",
     "socket.io": "^4.7.5"
   }

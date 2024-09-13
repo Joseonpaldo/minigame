@@ -1,9 +1,9 @@
 const socketIo = require('socket.io');
-const initPlatformerGame = require('./SocketForGame/PlatformerGameSocket');
+const initMiniGame = require('./SocketForGame/MinigameSocket');
 const initSnakeGame = require('./SocketForGame/SnakeGameSocket');
 
 const initGame = (io) => {
-    initPlatformerGame(io);
+    initMiniGame(io);
     initSnakeGame(io);
 }
 

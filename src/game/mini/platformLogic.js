@@ -6,12 +6,16 @@ const PLAYER_HEIGHT = 40;
 const GAME_WIDTH = 1200;
 const GAME_HEIGHT = 800;
 const BALL_SIZE = 50;
-const BALL_MOVE_AMOUNT = 2.5;
 const KNOCKBACK = 50;
 const ROCKET_SPEED = 2.4;
-const ROCKET_SPAWN_INTERVAL = 5000;
 const IMMUNITY_DURATION = 1000;  // Immunity duration in milliseconds
 const BOUNCE_HEIGHT = 2;  // Factor to increase the bounce height
+
+let gameLoops = {};  // Store game loops for each room
+let timerLoops = {};  // Store timer intervals for each room
+
+const GAME_UPDATE_INTERVAL = 1000 / 144; // Game updates 60 times per second (60 FPS)
+const TIMER_UPDATE_INTERVAL = 1000; // Timer updates every 1 second
 
 // Initialize game state
 const initGameState = () => ({
@@ -270,10 +274,88 @@ const updateGameEntities = (gameState) => {
     };
 };
 
+ // Platformer game loop
+ const startGameLoop = (session, io, socket) => {
+    gameLoops[session.id] = setInterval(() => {
+        if (session) {
+            // Update game entities (like balls, rockets, etc.)
+            session.gameState = updateGameEntities(session.gameState);
+
+            // Update player position continuously
+            session.gameState = gameUpdate(session.gameState, null);
+
+            // Check if the player falls off the map (loss condition)
+            if (session.gameState.player.y > GAME_HEIGHT) {
+                session.gameState.isGameOver = true;
+                io.to(session.id).emit('gameOver', { message: 'Game Over! You fell off the map!' });
+                if (session.host === socket) {
+                    socket.emit('hostLose', { winStatus: false, isGameOver: true});
+                }else {
+                    socket.emit('viewerFinish', { isGameOver: true});
+                }
+                clearInterval(session); // Stop the game loop
+                stopGameLoop(session); // Stop all game loops for this session
+            }
+
+            // Check if the player has won (win condition)
+            if (session.gameState.player.x >= session.gameState.portal.x &&
+                session.gameState.player.y >= session.gameState.portal.y) {
+                    session.gameState.isGameOver = true;
+                io.to(session.id).emit('gameWin', { message: 'You Win! You reached the portal!' });
+                if (session.host === socket) {
+                    socket.emit('hostWin', { winStatus: true, isGameOver: true});
+                }else {
+                    socket.emit('viewerFinish', { isGameOver: true});
+                }
+                clearInterval(session); // Stop the game loop
+                stopGameLoop(session); // Stop all game loops for this session
+            }
+
+            // Emit the updated game state to all players in the room
+            io.to(session.id).emit('gameStateUpdate', session.gameState);
+        }
+    }, GAME_UPDATE_INTERVAL); // 60 updates per second (16.67ms interval)
+};
+
+ // Timer loop that handles countdown for platformer
+ const startTimerLoop = (session, io, socket) => {
+    timerLoops[session.id] = setInterval(() => {
+        if (session && session.gameState.timeLeft > 0) {
+            session.gameState.timeLeft -= 1;  // Decrease time
+            io.to(session.id).emit('updateTimer', session.gameState.timeLeft);  // Emit time updates to all players
+        } else if (session && session.gameState.timeLeft <= 0) {
+            clearInterval(timerLoops[session.id]);  // Stop the timer loop
+            session.gameState.isGameOver = true; // Mark the game as over
+            io.to(session.id).emit('gameOver', { message: 'Game Over! Time is up!' });  // Notify players that the time is up
+            stopGameLoop(session);  // Stop the game loop
+        }
+    }, TIMER_UPDATE_INTERVAL);  // 1 second interval
+};
+
+ // Clear the game and timer loops when the session ends
+ const stopGameLoop = (currentSession) => {
+    if (gameLoops[currentSession.id]) {
+        clearInterval(gameLoops[currentSession.id]);
+        delete gameLoops[currentSession.id];
+    }
+    if (timerLoops[currentSession.id]) {
+        clearInterval(timerLoops[currentSession.id]);
+        delete timerLoops[currentSession.id];
+    }
+    // Clear the rocket spawn loop
+    if (currentSession && currentSession.rocketSpawnLoop) {
+        clearInterval(currentSession.rocketSpawnLoop);
+        delete currentSession.rocketSpawnLoop;
+    }
+};
+
 module.exports = {
     initGameState,
     startTimer,  // Export startTimer so it can be called independently
     gameUpdate,
     spawnRockets,
     updateGameEntities,
+    stopGameLoop,
+    startGameLoop,
+    startTimerLoop
 };
