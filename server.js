@@ -15,6 +15,10 @@ app.use(cors({
 app.use(express.json());
 app.use(express.static('public')); // Serve static files
 
+app.get('/nws/health', (req, res) => {
+  res.status(200).send('Server is running');
+});
+
 // Start server
 server.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);
