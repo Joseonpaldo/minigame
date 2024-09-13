@@ -78,5 +78,5 @@ jobs:
           docker pull ${{ secrets.REGISTRY_URL }}/joseonpaldo-nws:${{ env.COMMIT_HASH }}
           docker stop joseonpaldo-nws || true
           docker rm joseonpaldo-nws || true
-          docker run -d -p 3000:3000 --name joseonpaldo-nws ${{ secrets.REGISTRY_URL }}/joseonpaldo-nws:${{ env.COMMIT_HASH }}
+          docker run -d -p 4000:4000 --name joseonpaldo-nws ${{ secrets.REGISTRY_URL }}/joseonpaldo-nws:${{ env.COMMIT_HASH }}
           docker images --format '{{.Repository}}:{{.Tag}}' | grep joseonpaldo-nws | grep -v "${{ env.COMMIT_HASH }}" | xargs -r docker rmi || true
