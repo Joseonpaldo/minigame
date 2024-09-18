@@ -290,9 +290,7 @@ const updateGameEntities = (gameState) => {
                 session.gameState.isGameOver = true;
                 io.to(session.id).emit('gameOver', { message: 'Game Over! You fell off the map!' });
                 if (session.host === socket) {
-                    socket.emit('hostLose', { winStatus: false, isGameOver: true});
-                }else {
-                    socket.emit('viewerFinish', { isGameOver: true});
+                    socket.emit('hostResult', false);
                 }
                 clearInterval(session); // Stop the game loop
                 stopGameLoop(session); // Stop all game loops for this session
@@ -304,9 +302,7 @@ const updateGameEntities = (gameState) => {
                     session.gameState.isGameOver = true;
                 io.to(session.id).emit('gameWin', { message: 'You Win! You reached the portal!' });
                 if (session.host === socket) {
-                    socket.emit('hostWin', { winStatus: true, isGameOver: true});
-                }else {
-                    socket.emit('viewerFinish', { isGameOver: true});
+                    socket.emit('hostResult', true);
                 }
                 clearInterval(session); // Stop the game loop
                 stopGameLoop(session); // Stop all game loops for this session
@@ -328,6 +324,7 @@ const updateGameEntities = (gameState) => {
             clearInterval(timerLoops[session.id]);  // Stop the timer loop
             session.gameState.isGameOver = true; // Mark the game as over
             io.to(session.id).emit('gameOver', { message: 'Game Over! Time is up!' });  // Notify players that the time is up
+            io.to(session.id).emit('hostResult', false);
             stopGameLoop(session);  // Stop the game loop
         }
     }, TIMER_UPDATE_INTERVAL);  // 1 second interval
